@@ -1,0 +1,14 @@
+# - url: https://github.com/ruby/ruby
+#   branch: master
+# - url: https://github.com/jruby/jruby
+#   branch: master
+- url: https://github.com/rails/rails
+  branch: main
+- url: https://github.com/tric/trick2013
+  branch: master
+- url: https://github.com/tric/trick2015
+  branch: master
+- url: https://github.com/tric/trick2018
+  branch: master
+- url: https://github.com/tric/trick2022
+  branch: master

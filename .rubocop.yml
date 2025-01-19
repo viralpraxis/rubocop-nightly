@@ -1,0 +1,20 @@
+require:
+  - rubocop-rake
+  - rubocop-rspec
+  - rubocop-thread_safety
+  - rubocop-performance
+  - rubocop-minitest
+  - rubocop-sequel
+  - rubocop-capybara
+  - rubocop-factory_bot
+  - rubocop-rspec_rails
+
+AllCops:
+  TargetRubyVersion: 3.4
+  NewCops: enable
+
+Style/Documentation:
+  Enabled: false
+
+ThreadSafety/DirChdir:
+  Enabled: false

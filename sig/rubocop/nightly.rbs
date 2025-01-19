@@ -1,0 +1,5 @@
+module RuboCop
+  module Nightly
+    VERSION: String
+  end
+end
