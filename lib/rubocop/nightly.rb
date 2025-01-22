@@ -22,10 +22,12 @@ require_relative 'nightly/source'
 
 module RuboCop
   module Nightly
-    def self.logger
-      @logger ||= Logger.new($stdout) # rubocop:disable ThreadSafety/ClassInstanceVariable
-                        .tap { it.progname = 'rubocop-nightly' }
-                        .tap { it.formatter = proc { |severity, _time, _progname, msg| "[#{severity}]: #{msg}\n" } }
+    class << self
+      def logger
+        @logger ||= Logger.new($stdout) # rubocop:disable ThreadSafety/ClassInstanceVariable
+                          .tap { it.progname = 'rubocop-nightly' }
+                          .tap { it.formatter = proc { |severity, _time, _progname, msg| "[#{severity}]: #{msg}\n" } }
+      end
     end
   end
 end

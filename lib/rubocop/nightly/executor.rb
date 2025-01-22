@@ -9,18 +9,20 @@ module RuboCop
       end
 
       def call # rubocop:disable Metrics
+        RuboCop::Nightly.logger.level = log_level
+
         base_paths = source.fetch
         total_batches_count = (base_paths.size.to_f / batch_size).ceil
 
         base_paths.each_slice(batch_size).with_index do |batch, index|
-          RuboCop::Nightly.logger.debug "Processing group #{index.succ}/#{total_batches_count}"
+          RuboCop::Nightly.logger.info "Processing group #{index.succ}/#{total_batches_count}"
 
           with_timeout do
             RuboCop::Nightly::Runner
               .new(prepare_target_paths(batch))
               .run
           rescue Timeout::Error
-            RuboCop::Nightly.logger.debug "Processing group #{index.succ} took more than #{batch_timeout}s, aborting"
+            RuboCop::Nightly.logger.warn "Processing group #{index.succ} took more than #{batch_timeout}s, aborting"
           end
         end
       end
@@ -30,6 +32,8 @@ module RuboCop
       def batch_size = @batch_size ||= options.fetch(:batch_size)
 
       def batch_timeout = @batch_timeout ||= options.fetch(:batch_timeout)
+
+      def log_level = @log_level ||= options.fetch(:log_level)
 
       def prepare_target_paths(paths)
         # paths.map { |path| path.end_with?('.rb') ? path : "#{path}/**/*.rb" } # FIXME

@@ -37,7 +37,7 @@ module RuboCop
 
           persisted_configuration_file = Tempfile.create
           persisted_configuration_file.write(File.read(CONFIGURATION_PATH))
-          RuboCop::Nightly.logger.warn "Using configuration #{persisted_configuration_file.path}"
+          RuboCop::Nightly.logger.error "Using configuration #{persisted_configuration_file.path}"
           rubocop_errors.each { RuboCop::Nightly.logger.warn it }
         end
 

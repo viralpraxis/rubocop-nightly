@@ -21,6 +21,10 @@ RSpec.configure do |config|
       `bundle exec rake gems:fetch`
     end
   end
+
+  config.before(:all) do
+    RuboCop::Nightly.logger.level = Logger::Severity::FATAL
+  end
 end
 
 Dir["#{__dir__}/support/**/*.rb"].each { require_relative(it) }

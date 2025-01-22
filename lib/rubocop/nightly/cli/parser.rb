@@ -10,16 +10,19 @@ module RuboCop
         BATCH_SIZE_DEFAULT = 100
         private_constant(*constants(false))
 
-        Options = Data.define(:source, :mirror_path, :git_sources, :batch_size, :batch_timeout) do
+        # rubocop:disable Metrics/ParameterLists
+        Options = Data.define(:source, :mirror_path, :git_sources, :batch_size, :batch_timeout, :log_level) do
           def initialize(
             source:,
             mirror_path: nil,
             git_sources: nil,
             batch_size: BATCH_SIZE_DEFAULT,
-            batch_timeout: nil
+            batch_timeout: nil,
+            log_level: 'INFO'
           )
             super
           end
+          # rubocop:enable Metrics/ParameterLists
 
           def source_options
             if source == 'mirror'
@@ -32,7 +35,7 @@ module RuboCop
           end
 
           def executor_options
-            { batch_size:, batch_timeout: }
+            { batch_size:, batch_timeout:, log_level: }
           end
         end
 
@@ -58,7 +61,7 @@ module RuboCop
             end
           end
 
-          def apply_parser_options(parser, storage) # rubocop:disable Metrics/MethodLength
+          def apply_parser_options(parser, storage) # rubocop:disable Metrics
             parser.on('-s SOURCE', '--source SOURCE', 'Source') { storage[:source] = it }
             parser.on('-b BATCH_SIZE', '--batch-size BATCH_SIZE', Integer, 'Batch size') { storage[:batch_size] = it }
             parser.on('-t', '--batch-timeout BATCH_TIMEOUT', Integer, 'Batch timeout (s)') do
@@ -70,6 +73,7 @@ module RuboCop
             parser.on('-g GIT_SOURCES', '--git-sources', 'Git source to fetch') do
               storage[:git_sources] = YAML.safe_load_file(it)
             end
+            parser.on('-l LOG_LEVEL', '--log-level LOG_LEVEL', 'Log level') { storage[:log_level] = it }
           end
 
           def validate_required_arguments!(arguments)
