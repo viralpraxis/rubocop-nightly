@@ -13,7 +13,7 @@ require_relative 'nightly/executor'
 require_relative 'nightly/runner'
 require_relative 'nightly/configuration'
 require_relative 'nightly/configuration/dependencies_miner'
-require_relative 'nightly/null_formatter'
+# require_relative 'nightly/null_formatter'
 
 require_relative 'nightly/source/rubygems'
 require_relative 'nightly/source/mirror'

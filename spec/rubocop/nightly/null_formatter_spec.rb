@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require 'rubocop'
+require 'rubocop/nightly/null_formatter'
+
 RSpec.describe RuboCop::Nightly::NullFormatter do
   subject(:formatter) { described_class.new(File::NULL) }
 

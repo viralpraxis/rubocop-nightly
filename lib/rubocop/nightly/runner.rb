@@ -21,7 +21,7 @@ module RuboCop
           _, stderr, exit = Runtime.execute(
             *target_paths,
             '-c', CONFIGURATION_PATH.to_s,
-            '--format', RuboCop::Nightly::NullFormatter.name,
+            '--format', 'RuboCop::Nightly::NullFormatter',
             '--cache', 'false',
             '-r', "#{__dir__}/null_formatter.rb",
             *(['--only', cops.join(',')] if cops)
