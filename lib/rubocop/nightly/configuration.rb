@@ -49,7 +49,7 @@ module RuboCop
       end
 
       def cop_names
-        @cop_names ||= raw_configuration.keys.select { %r{[A-Z][a-z]+/[A-Z][a-z]+}.match?(it) }
+        @cop_names ||= raw_configuration.keys.grep(%r{[A-Z][a-z]+/[A-Z][a-z]+})
       end
 
       def variants
