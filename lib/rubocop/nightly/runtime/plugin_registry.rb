@@ -8,7 +8,7 @@ module RuboCop
     module Runtime
       class PluginRegistry
         CONFIGUTATION_FILEPATH = Pathname('config/gems.yml').freeze
-        ALL = YAML.safe_load_file(CONFIGUTATION_FILEPATH).select { _1['type'] == 'plugin' }.each(&:freeze).freeze
+        ALL = YAML.safe_load_file(CONFIGUTATION_FILEPATH).select { it['type'] == 'plugin' }.each(&:freeze).freeze
         ALL_NAMES = ALL.map { it.fetch('name').freeze }.freeze
 
         class << self

@@ -7,22 +7,22 @@ RSpec.describe RuboCop::Nightly::Runtime do
     end
 
     it 'performs commands and returns expected result', :aggregate_failures do
-      stdout, stderr, exit = described_class.execute('--show-cops')
+      stdout, stderr, exitstatus = described_class.execute('--show-cops')
 
       expect(parsed_configuration(stdout).keys).to include('Bundler/DuplicatedGem')
       expect(parsed_configuration(stdout).keys).not_to include('ThreadSafety/DirChdir')
       expect(stderr).to be_empty
-      expect(exit).to be_success
+      expect(exitstatus).to be_success
     end
 
     context 'with argument `require_plugins` set to `true`', :aggregate_failures do
       it 'performs command with required rubocop plugins and returns expected result' do
-        stdout, stderr, exit = described_class.execute('--show-cops', require_plugins: true)
+        stdout, stderr, exitstatus = described_class.execute('--show-cops', require_plugins: true)
 
         expect(parsed_configuration(stdout).keys).to include('Bundler/DuplicatedGem')
         expect(parsed_configuration(stdout).keys).to include('ThreadSafety/DirChdir')
-        expect(stderr).to be_empty
-        expect(exit).to be_success
+        expect(stderr.split("\n").reject { it.include?('gem supports plugin') }).to be_empty
+        expect(exitstatus).to be_success
       end
     end
   end

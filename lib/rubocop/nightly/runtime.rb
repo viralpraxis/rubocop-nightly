@@ -34,7 +34,7 @@ module RuboCop
         def plugin_requires_directive
           RuboCop::Nightly::Runtime::PluginRegistry
             .all_names
-            .map { ['-r', _1] }
+            .map { ['-r', it] }
             .flatten
         end
       end
