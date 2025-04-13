@@ -2,10 +2,15 @@
   url: https://github.com/rubocop/rubocop.git
   branch: master
   type: core
+- name: rubocop-ast
+  url: https://github.com/rubocop/rubocop-ast.git
+  branch: master
+  type: core
 - name: rubocop-rake
   url: https://github.com/rubocop/rubocop-rake.git
   branch: master
   type: plugin
+  post_install_script: cd $(bundle info --path rubocop-ast) && bundle install && bundle exec rake generate
 - name: rubocop-rspec
   url: https://github.com/rubocop/rubocop-rspec.git
   branch: master
