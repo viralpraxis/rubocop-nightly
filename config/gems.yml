@@ -43,3 +43,6 @@
   url: https://github.com/rubocop/rubocop-rspec_rails.git
   branch: master
   type: plugin
+- name: rubocop-packaging
+  url: https://github.com/utkarsh2102/rubocop-packaging.git
+  branch: master
