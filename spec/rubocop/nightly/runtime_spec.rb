@@ -31,7 +31,7 @@ RSpec.describe RuboCop::Nightly::Runtime do
     it 'has expected value' do
       expect(described_class.data_directory)
         .to be_a(Pathname).and be_frozen
-        .and eq(Pathname(File.join(Dir.home, 'local', 'share', 'rubocop-nightly')))
+        .and eq(Pathname(File.join(Dir.home, '.local', 'share', 'rubocop-nightly')))
     end
 
     context 'with set `XDG_DATA_HOME` environment variable' do
