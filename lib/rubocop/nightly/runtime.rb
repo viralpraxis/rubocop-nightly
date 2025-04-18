@@ -21,11 +21,8 @@ module RuboCop
 
         def gems_data_directory = Pathname(data_directory.join('rubocop-gems')).freeze
 
-        # FIXME: should be `~/.local/share/rubocop-nightly` by default;
-        # blocked by https://github.com/rubocop/rubocop/issues/13676.
-        # Maybe explicit top-level config `Include` should work?
         def data_directory
-          Pathname(ENV.fetch('XDG_DATA_HOME', File.join(Dir.home, 'local', 'share'))).then do |path|
+          Pathname(ENV.fetch('XDG_DATA_HOME', File.join(Dir.home, '.local', 'share'))).then do |path|
             path.join('rubocop-nightly').freeze
           end
         end
