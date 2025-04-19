@@ -4,25 +4,35 @@ require 'yaml'
 
 module RuboCop
   module Nightly
-    class Configuration
+    class Configuration # rubocop:disable Metrics/ClassLength
       class << self
-        def build(raw_configuration = load_configuration_from_rubocop_executable)
+        def build(
+          raw_configuration = nil,
+          enable_all_cops: false,
+          remove_plugins: false,
+          keep_core_departments: false
+        )
+          raw_configuration ||= load_configuration_from_rubocop_executable(require_plugins: !remove_plugins)
           apply_configuration_corrections(raw_configuration)
+
+          remove_plugins(raw_configuration) if remove_plugins
+          enable_all_cops(raw_configuration) if enable_all_cops
+          keep_core_departments(raw_configuration) if keep_core_departments
 
           new(raw_configuration)
         end
 
         private
 
-        def load_configuration_from_rubocop_executable
+        def load_configuration_from_rubocop_executable(require_plugins: false)
           RuboCop::Nightly::Runtime
-            .execute('--show-cops', require_plugins: true)
-            .first
+            .execute('--show-cops', require_plugins:)
+            .fetch(0)
             .then { YAML.load(it, permitted_classes: [Regexp, Symbol]) }
         end
 
         def apply_configuration_corrections(raw_configuration) # rubocop:disable Metrics
-          raw_configuration['require'] =
+          raw_configuration['plugins'] =
             RuboCop::Nightly::Runtime::PluginRegistry
             .all_names
           # .map { |plugin_name| RuboCop::Nightly::Runtime.plugin_require_path(plugin_name).to_s }
@@ -42,6 +52,25 @@ module RuboCop
             cop_configuration['Enabled'] = true
           end
         end
+
+        def enable_all_cops(raw_configuration)
+          raw_configuration.transform_values do |value|
+            value.tap { it['Enabled'] = true }
+          end
+        end
+
+        def remove_plugins(raw_configuration)
+          raw_configuration.delete('require')
+          raw_configuration.delete('plugins')
+        end
+
+        def keep_core_departments(raw_configuration)
+          raw_configuration.select! { |k, _| RuboCop::Nightly::Runtime::CORE_DEPARTMENTS.any? { k.start_with?(it) } }
+        end
+      end
+
+      def to_yaml
+        YAML.dump(@raw_configuration)
       end
 
       def dependencies

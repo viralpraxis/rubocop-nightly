@@ -3,11 +3,6 @@ plugins:
   - rubocop-rspec
   - rubocop-thread_safety
   - rubocop-performance
-  - rubocop-minitest
-  - rubocop-sequel
-  - rubocop-capybara
-  - rubocop-factory_bot
-  - rubocop-rspec_rails
 
 AllCops:
   TargetRubyVersion: 3.4
@@ -18,3 +13,6 @@ Style/Documentation:
 
 ThreadSafety/DirChdir:
   Enabled: false
+
+RSpec/ExampleLength:
+  Max: 10

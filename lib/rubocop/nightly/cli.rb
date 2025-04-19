@@ -8,9 +8,15 @@ module RuboCop
       end
 
       def run
-        Executor
-          .new(Source.build(options.source, **options.source_options), options.executor_options)
-          .call
+        if options.command == :fuzzer
+          Executor # FIXME
+            .new(Source.build(options.source, **options.source_options), options.executor_options)
+            .call
+        else
+          Commands::Compare
+            .new(options)
+            .call
+        end
       end
 
       private

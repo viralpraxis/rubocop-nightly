@@ -1,9 +1,16 @@
 # frozen_string_literal: true
 
-RSpec.describe RuboCop::Nightly::Runner do
+RSpec.describe RuboCop::Nightly::Commands::Fuzzer::Runner do
   describe '#run' do
     subject(:runner) do
       described_class.new(['/a.rb'], configuration)
+    end
+
+    let(:plugin_requires_directive) do
+      RuboCop::Nightly::Runtime::PluginRegistry
+        .all_names
+        .map { ['--plugin', it] }
+        .flatten
     end
 
     before do
@@ -24,15 +31,16 @@ RSpec.describe RuboCop::Nightly::Runner do
         )
       end
 
-      it 'invokes rubocop once' do # rubocop:disable RSpec/ExampleLength
+      it 'invokes rubocop once' do
         runner.run
 
         expect(Open3).to have_received(:capture3)
           .with(
-            'bundle', 'exec', 'rubocop', '/a.rb', '-c',
+            { 'BUNDLE_GEMFILE' => File.join(RuboCop::Nightly::Runtime.gems_data_directory, 'Gemfile') },
+            'bundle', 'exec', 'rubocop', *plugin_requires_directive, '/a.rb', '-c',
             '/tmp/rubocop-nightly-configuration.yml', '--format', 'RuboCop::Nightly::NullFormatter',
             '--cache', 'false', '-r',
-            Pathname.new("#{__dir__}/../../../lib/rubocop/nightly/null_formatter.rb").cleanpath.to_s
+            File.expand_path('../../../../../lib/rubocop/nightly/null_formatter.rb', __dir__)
           )
           .once
       end
@@ -54,15 +62,16 @@ RSpec.describe RuboCop::Nightly::Runner do
         )
       end
 
-      it 'invokes rubocop 3 times' do # rubocop:disable RSpec/ExampleLength
+      it 'invokes rubocop 3 times' do
         runner.run
 
         expect(Open3).to have_received(:capture3)
           .with(
-            'bundle', 'exec', 'rubocop', '/a.rb', '-c',
+            { 'BUNDLE_GEMFILE' => File.join(RuboCop::Nightly::Runtime.gems_data_directory, 'Gemfile') },
+            'bundle', 'exec', 'rubocop', *plugin_requires_directive, '/a.rb', '-c',
             '/tmp/rubocop-nightly-configuration.yml', '--format', 'RuboCop::Nightly::NullFormatter',
             '--cache', 'false', '-r',
-            Pathname.new("#{__dir__}/../../../lib/rubocop/nightly/null_formatter.rb").cleanpath.to_s
+            File.expand_path('../../../../../lib/rubocop/nightly/null_formatter.rb', __dir__)
           )
           .exactly(3).times
       end
@@ -104,15 +113,16 @@ RSpec.describe RuboCop::Nightly::Runner do
         )
       end
 
-      it 'invokes rubocop 3 times' do # rubocop:disable RSpec/ExampleLength
+      it 'invokes rubocop 3 times' do
         runner.run
 
         expect(Open3).to have_received(:capture3)
           .with(
-            'bundle', 'exec', 'rubocop', '/a.rb', '-c',
+            { 'BUNDLE_GEMFILE' => File.join(RuboCop::Nightly::Runtime.gems_data_directory, 'Gemfile') },
+            'bundle', 'exec', 'rubocop', *plugin_requires_directive, '/a.rb', '-c',
             '/tmp/rubocop-nightly-configuration.yml', '--format', 'RuboCop::Nightly::NullFormatter',
             '--cache', 'false', '-r',
-            Pathname.new("#{__dir__}/../../../lib/rubocop/nightly/null_formatter.rb").cleanpath.to_s
+            File.expand_path('../../../../../lib/rubocop/nightly/null_formatter.rb', __dir__)
           )
           .exactly(3).times
       end

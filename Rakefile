@@ -11,7 +11,7 @@ RuboCop::RakeTask.new
 
 task default: %i[spec rubocop]
 
-namespace :gems do
+namespace :gems do # rubocop:disable Metrics/BlockLength
   desc 'fetch latest rubocop gems from `config/gems.yml` sources'
   task :fetch do
     require 'yaml'
@@ -21,16 +21,20 @@ namespace :gems do
       # frozen_string_literal: true
 
       source 'https://rubygems.org'
+
     GEMFILE
 
     gems_config = YAML.safe_load_file('config/gems.yml')
     gems_config.each do |gem_config|
       gem_name = gem_config.fetch('name')
-      gem_url = gem_config.fetch('url')
+      gem_url = gem_config.fetch('url', nil)
       gem_branch = gem_config.fetch('branch', 'master')
 
-      gemfile_content << "gem '#{gem_name}', git: '#{gem_url}', branch: '#{gem_branch}'" << "\n"
+      gemfile_content << "gem '#{gem_name}'"
+      gemfile_content << ", git: '#{gem_url}', branch: '#{gem_branch}'" if gem_url
+      gemfile_content << "\n"
     end
+    gemfile_content << "gem 'pry'" << "\n"
 
     FileUtils.mkdir_p(RuboCop::Nightly::Runtime.gems_data_directory)
 

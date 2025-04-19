@@ -27,7 +27,6 @@ module RuboCop
 
           gems.filter_map do |gem|
             gem_name, version = gem.values_at('name', 'version')
-            puts "Processing gem: #{gem_name} (version: #{version})"
 
             download_and_extract_gem(gem_name, version, @base_path)
           end
