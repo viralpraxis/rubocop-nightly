@@ -45,4 +45,9 @@
   type: plugin
 - name: rubocop-packaging
   url: https://github.com/utkarsh2102/rubocop-packaging.git
+  type: plugin
   branch: master
+- name: rubocop-rails
+  url: https://github.com/rubocop/rubocop-rails.git
+  branch: master
+  type: plugin
