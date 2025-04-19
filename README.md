@@ -10,7 +10,34 @@ NOTE: Only MRI 3.4 is supported.
 
 ## Usage
 
-Before running `rubocop-nightly`, acquire the latest RuboCop core and plugins by executing the following Rake task:
+> **Warning**
+>
+> Prior to [this patch](https://github.com/rubocop/rubocop/pull/14073), RuboCop was not able to investigate folders with hidden directory (`/.`) segments. If you need to run RuboCop which does not contain this patch, specify `XDG_DATA_HOME` so that it does not contain hidden segments.
+
+### Comparison
+
+RuboCop Nightly's `compare` command can be used to detect offenses difference between two RuboCop revisions.
+You can simpliy run
+
+```bash
+bin/rubocop-nightly compare --from 53e5d198f --to master --source https://github.com/rails/rails.git
+```
+
+or
+
+```bash
+bin/rubocop-nightly compare --from https://github.com/viralpraxis/rubocop.git:53e5d198f --to master --source https://github.com/rails/rails.git:main
+```
+
+or even
+
+```bash
+bin/rubocop-nightly compare --from https://github.com/viralpraxis/rubocop.git:53e5d198f --to https://github.com/Earlopain/rubocop.git:master --source https://github.com/rails/rails.git:feature-1
+```
+
+### Fuzzing
+
+Before running RuboCop Nightly's `fuzzer` command, acquire the latest RuboCop core and plugins by executing the following Rake task:
 
 ```console
 bundle exec rake gems:fetch

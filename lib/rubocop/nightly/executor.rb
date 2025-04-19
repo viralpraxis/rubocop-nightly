@@ -18,8 +18,8 @@ module RuboCop
           RuboCop::Nightly.logger.info "Processing group #{index.succ}/#{total_batches_count}"
 
           with_timeout do
-            RuboCop::Nightly::Runner
-              .new(prepare_target_paths(batch))
+            RuboCop::Nightly::Commands::Fuzzer::Runner
+              .new(batch)
               .run
           rescue Timeout::Error
             RuboCop::Nightly.logger.warn "Processing group #{index.succ} took more than #{batch_timeout}s, aborting"
@@ -34,11 +34,6 @@ module RuboCop
       def batch_timeout = @batch_timeout ||= options.fetch(:batch_timeout)
 
       def log_level = @log_level ||= options.fetch(:log_level)
-
-      def prepare_target_paths(paths)
-        # paths.map { |path| path.end_with?('.rb') ? path : "#{path}/**/*.rb" } # FIXME
-        paths
-      end
 
       def with_timeout(&)
         if batch_timeout

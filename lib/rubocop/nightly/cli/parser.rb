@@ -6,13 +6,19 @@ require 'optparse'
 module RuboCop
   module Nightly
     class CLI
-      class Parser
+      class Parser # rubocop:disable Metrics/ClassLength
         BATCH_SIZE_DEFAULT = 100
         private_constant(*constants(false))
 
-        # rubocop:disable Metrics/ParameterLists
-        Options = Data.define(:source, :mirror_path, :git_sources, :batch_size, :batch_timeout, :log_level) do
-          def initialize(
+        FuzzerOptions = Data.define(
+          :source,
+          :mirror_path,
+          :git_sources,
+          :batch_size,
+          :batch_timeout,
+          :log_level
+        ) do
+          def initialize( # rubocop:disable Metrics/ParameterLists
             source:,
             mirror_path: nil,
             git_sources: nil,
@@ -22,7 +28,6 @@ module RuboCop
           )
             super
           end
-          # rubocop:enable Metrics/ParameterLists
 
           def source_options
             if source == 'mirror'
@@ -37,31 +42,53 @@ module RuboCop
           def executor_options
             { batch_size:, batch_timeout:, log_level: }
           end
+
+          def command = :fuzzer
+        end
+
+        CompareOptions = Data.define(:from, :to, :source) do
+          def command = :compare
         end
 
         class << self
-          def parse(arguments)
+          def parse(arguments) # rubocop:disable Metrics
             raw_options = {}
-            option_parser(raw_options).parse!(arguments)
+            command = ARGV.shift
+            option_parser(raw_options, command).parse!(arguments)
 
-            validate_required_arguments!(raw_options)
-            validate_mirror_specific_arguments!(raw_options)
-            validate_git_specific_arguments!(raw_options)
+            if command == 'fuzzer'
+              validate_fuzzer_arguments!(raw_options)
+              validate_mirror_specific_arguments!(raw_options)
+              validate_git_specific_arguments!(raw_options)
+            elsif command == 'compare'
+              validate_comparer_arguments!(raw_options)
+            else
+              raise ArgumentError, command
+            end
 
-            Options.new(**raw_options.slice(*Options.members))
+            options_class = fetch_options_class(command)
+            options_class.new(**raw_options.slice(*options_class.members))
           end
 
           private
 
-          def option_parser(storage)
-            OptionParser.new do |parser|
-              parser.banner = 'Usage: example.rb [options]'
+          def fetch_options_class(command)
+            { 'fuzzer' => FuzzerOptions, 'compare' => CompareOptions }.fetch(command)
+          end
 
-              apply_parser_options(parser, storage)
+          def option_parser(storage, command)
+            OptionParser.new do |parser|
+              parser.banner = 'Usage: rubocop-nightly command [options]'
+
+              if command == 'fuzzer'
+                apply_fuzzer_parser_options(parser, storage)
+              elsif command == 'compare'
+                apply_comparer_parser_options(parser, storage)
+              end
             end
           end
 
-          def apply_parser_options(parser, storage) # rubocop:disable Metrics
+          def apply_fuzzer_parser_options(parser, storage) # rubocop:disable Metrics
             parser.on('-s SOURCE', '--source SOURCE', 'Source') { storage[:source] = it }
             parser.on('-b BATCH_SIZE', '--batch-size BATCH_SIZE', Integer, 'Batch size') { storage[:batch_size] = it }
             parser.on('-t', '--batch-timeout BATCH_TIMEOUT', Integer, 'Batch timeout (s)') do
@@ -76,7 +103,19 @@ module RuboCop
             parser.on('-l LOG_LEVEL', '--log-level LOG_LEVEL', 'Log level') { storage[:log_level] = it }
           end
 
-          def validate_required_arguments!(arguments)
+          def apply_comparer_parser_options(parser, storage)
+            parser.on('-f FROM', '--from FROM', 'RuboCop revision') { storage[:from] = it }
+            parser.on('-t TO', '--to TO', 'RuboCop revision') { storage[:to] = it }
+            parser.on('-s SOURCE', '--source SOURCE', 'Git URL to apply comparsion to') { storage[:source] = it }
+          end
+
+          def validate_comparer_arguments!(arguments)
+            raise OptionParser::MissingArgument, '--from' unless arguments[:from]
+            raise OptionParser::MissingArgument, '--to' unless arguments[:to]
+            raise OptionParser::MissingArgument, '--source' unless arguments[:source]
+          end
+
+          def validate_fuzzer_arguments!(arguments)
             return unless arguments[:source].nil? || arguments[:source].empty?
 
             raise OptionParser::MissingArgument, '--source'

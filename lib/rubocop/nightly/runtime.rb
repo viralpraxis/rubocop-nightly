@@ -1,20 +1,26 @@
 # frozen_string_literal: true
 
 require 'open3'
-require 'bundler'
 
 module RuboCop
   module Nightly
     module Runtime
-      class << self
-        def execute(*command, require_plugins: false)
-          Bundler.with_original_env do
-            Dir.chdir(RuboCop::Nightly::Runtime.gems_data_directory) do
-              ENV['BUNDLE_GEMFILE'] = RuboCop::Nightly::Runtime.gems_data_directory.join('Gemfile').to_s
+      CORE_DEPARTMENTS = %w[AllCops Bundler Layour Metrics Naming Security Style Lint].to_set.freeze
 
-              Open3.capture3('bundle', 'exec', 'rubocop', *(plugin_requires_directive if require_plugins), *command)
-            end
-          end
+      class << self
+        def execute(
+          *command,
+          require_plugins: false,
+          bundle_gemfile: Pathname(Dir.pwd).join('Gemfile')
+        )
+          Open3.capture3(
+            { 'BUNDLE_GEMFILE' => bundle_gemfile.to_s },
+            'bundle',
+            'exec',
+            'rubocop',
+            *(plugin_requires_directive if require_plugins),
+            *command
+          )
         end
 
         def plugin_require_path(plugin_name) = gems_data_directory.join(plugin_name, 'lib', plugin_name).freeze
@@ -27,12 +33,14 @@ module RuboCop
           end
         end
 
+        def rubocop_repository_uri = 'https://github.com/rubocop/rubocop.git'
+
         private
 
         def plugin_requires_directive
           RuboCop::Nightly::Runtime::PluginRegistry
             .all_names
-            .map { ['-r', it] }
+            .map { ['--plugin', it] }
             .flatten
         end
       end
