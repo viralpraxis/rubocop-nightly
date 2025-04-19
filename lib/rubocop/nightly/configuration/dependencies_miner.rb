@@ -37,8 +37,12 @@ module RuboCop
         private
 
         def cop_source_paths
+          # FIXME: infer 3.4.0 from `RUBY_VERSION`
           @cop_source_paths ||=
-            Dir.glob(RuboCop::Nightly::Runtime.gems_data_directory.join('*/lib/rubocop/cop/**/*.rb'))
+            Dir.glob(
+              RuboCop::Nightly::Runtime.gems_data_directory.join('ruby/3.4.0/bundler/gems/*/lib/rubocop/cop/**/*.rb'),
+              flags: File::FNM_DOTMATCH
+            )
         end
 
         attr_reader :cop_names

@@ -57,8 +57,10 @@ namespace :cops do
   task :dependencies do
     require_relative 'lib/rubocop/nightly'
 
-    RuboCop::Nightly::Configuration.build.dependencies.each do |cop_name, dependencies|
-      puts "#{cop_name}: #{dependencies.join(',')}"
+    Dir.chdir(RuboCop::Nightly::Runtime.gems_data_directory) do
+      RuboCop::Nightly::Configuration.build.dependencies.each do |cop_name, dependencies|
+        puts "#{cop_name}: #{dependencies.join(',')}"
+      end
     end
   end
 end
