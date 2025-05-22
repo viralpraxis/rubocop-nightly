@@ -15,4 +15,4 @@ ThreadSafety/DirChdir:
   Enabled: false
 
 RSpec/ExampleLength:
-  Max: 10
+  Max: 12

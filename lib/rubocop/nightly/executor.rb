@@ -21,7 +21,7 @@ module RuboCop
             RuboCop::Nightly::Commands::Fuzzer::Runner
               .new(batch)
               .run
-          rescue Timeout::Error
+          rescue Timeout::ExitException
             RuboCop::Nightly.logger.warn "Processing group #{index.succ} took more than #{batch_timeout}s, aborting"
           end
         end

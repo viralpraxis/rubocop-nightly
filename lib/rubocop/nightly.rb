@@ -14,6 +14,7 @@ require_relative 'nightly/runtime/plugin_registry'
 require_relative 'nightly/executor'
 require_relative 'nightly/configuration'
 require_relative 'nightly/configuration/dependencies_miner'
+require_relative 'nightly/configuration/traversal'
 
 require_relative 'nightly/source/rubygems'
 require_relative 'nightly/source/mirror'

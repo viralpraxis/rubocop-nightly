@@ -59,6 +59,7 @@ module RuboCop
                 Dir.chdir(runtime.relative_path) do
                   system('git', 'fetch', exception: true, out: File::NULL)
                   system('git', 'checkout', runtime.revision, exception: true, out: File::NULL)
+                  system('git', 'pull', exception: true, out: File::NULL)
                   system('bundle', 'install', exception: true, out: File::NULL)
 
                   Nightly.logger.info "Successfully prepared RuboCop with revision #{runtime.revision}"
@@ -96,11 +97,12 @@ module RuboCop
             def run_rubocop(runtime, source_directory_path)
               Dir.chdir(RUNTIME_DIR.join(runtime.relative_path)) do
                 rubocop_configuration_path = create_default_rubocop_configuration_file
-                stdout, stderr, = Runtime.execute(
+                stdout, stderr, status = Runtime.execute(
                   source_directory_path.to_s, '--cache',
                   'false', '--format',
                   'json', '-c', rubocop_configuration_path
                 )
+                RuboCop::Nightly.logger.error(stderr) if status.exitstatus == 2
 
                 RuboCop::Nightly.logger.warn(stderr) unless stderr.empty?
                 JSON.parse(stdout)

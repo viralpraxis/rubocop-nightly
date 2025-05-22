@@ -9,9 +9,11 @@ module RuboCop
         end
 
         def fetch
-          Dir.entries(@mirror_path)
-             .select { File.directory?("#{@mirror_path}/#{it}") && it != '.' && it != '..' }
-             .map { "#{@mirror_path}/#{it}" }
+          paths = @mirror_path.include?('*') ? Dir.glob(@mirror_path) : Dir.entries(@mirror_path)
+          paths = paths.reject { it == '.' || it == '..' }
+          paths = paths.map { |entry| File.join(@mirror_path, entry) }
+
+          paths
         end
       end
     end

@@ -32,12 +32,12 @@ module RuboCop
 
               _, stderr, status = Dir.chdir(Runtime.gems_data_directory) do
                 Runtime.execute(
-                  *target_paths,
                   '-c', CONFIGURATION_PATH.to_s,
                   '--format', 'RuboCop::Nightly::NullFormatter',
-                  '--cache', 'false',
+                  '--parallel',
                   '-r', File.expand_path('../../null_formatter.rb', __dir__),
                   *(['--only', cops.join(',')] if cops),
+                  *target_paths,
                   require_plugins: true
                 )
               end

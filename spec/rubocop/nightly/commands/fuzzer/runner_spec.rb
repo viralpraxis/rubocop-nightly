@@ -37,10 +37,11 @@ RSpec.describe RuboCop::Nightly::Commands::Fuzzer::Runner do
         expect(Open3).to have_received(:capture3)
           .with(
             { 'BUNDLE_GEMFILE' => File.join(RuboCop::Nightly::Runtime.gems_data_directory, 'Gemfile') },
-            'bundle', 'exec', 'rubocop', *plugin_requires_directive, '/a.rb', '-c',
+            'bundle', 'exec', 'rubocop', *plugin_requires_directive, '-c',
             '/tmp/rubocop-nightly-configuration.yml', '--format', 'RuboCop::Nightly::NullFormatter',
             '--cache', 'false', '-r',
-            File.expand_path('../../../../../lib/rubocop/nightly/null_formatter.rb', __dir__)
+            File.expand_path('../../../../../lib/rubocop/nightly/null_formatter.rb', __dir__),
+            '/a.rb'
           )
           .once
       end
@@ -68,10 +69,11 @@ RSpec.describe RuboCop::Nightly::Commands::Fuzzer::Runner do
         expect(Open3).to have_received(:capture3)
           .with(
             { 'BUNDLE_GEMFILE' => File.join(RuboCop::Nightly::Runtime.gems_data_directory, 'Gemfile') },
-            'bundle', 'exec', 'rubocop', *plugin_requires_directive, '/a.rb', '-c',
+            'bundle', 'exec', 'rubocop', *plugin_requires_directive, '-c',
             '/tmp/rubocop-nightly-configuration.yml', '--format', 'RuboCop::Nightly::NullFormatter',
             '--cache', 'false', '-r',
-            File.expand_path('../../../../../lib/rubocop/nightly/null_formatter.rb', __dir__)
+            File.expand_path('../../../../../lib/rubocop/nightly/null_formatter.rb', __dir__),
+            '/a.rb'
           )
           .exactly(3).times
       end
@@ -119,10 +121,11 @@ RSpec.describe RuboCop::Nightly::Commands::Fuzzer::Runner do
         expect(Open3).to have_received(:capture3)
           .with(
             { 'BUNDLE_GEMFILE' => File.join(RuboCop::Nightly::Runtime.gems_data_directory, 'Gemfile') },
-            'bundle', 'exec', 'rubocop', *plugin_requires_directive, '/a.rb', '-c',
+            'bundle', 'exec', 'rubocop', *plugin_requires_directive, '-c',
             '/tmp/rubocop-nightly-configuration.yml', '--format', 'RuboCop::Nightly::NullFormatter',
             '--cache', 'false', '-r',
-            File.expand_path('../../../../../lib/rubocop/nightly/null_formatter.rb', __dir__)
+            File.expand_path('../../../../../lib/rubocop/nightly/null_formatter.rb', __dir__),
+            '/a.rb'
           )
           .exactly(3).times
       end

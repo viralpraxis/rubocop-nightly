@@ -4,7 +4,7 @@ require 'yaml'
 
 module RuboCop
   module Nightly
-    class Configuration # rubocop:disable Metrics/ClassLength
+    class Configuration
       class << self
         def build(
           raw_configuration = nil,
@@ -18,6 +18,7 @@ module RuboCop
           remove_plugins(raw_configuration) if remove_plugins
           enable_all_cops(raw_configuration) if enable_all_cops
           keep_core_departments(raw_configuration) if keep_core_departments
+          remove_obsolete_attributes(raw_configuration)
 
           new(raw_configuration)
         end
@@ -67,6 +68,10 @@ module RuboCop
         def keep_core_departments(raw_configuration)
           raw_configuration.select! { |k, _| RuboCop::Nightly::Runtime::CORE_DEPARTMENTS.any? { k.start_with?(it) } }
         end
+
+        def remove_obsolete_attributes(raw_configuration)
+          raw_configuration.each_value { |value| value.delete('Include'); value.delete('Exclude') }
+        end
       end
 
       def to_yaml
@@ -82,54 +87,32 @@ module RuboCop
       end
 
       def variants
-        @variants ||= basic_variants + dependent_variants
+        @variants ||= begin
+          traversal_configuration = raw_configuration
+                                    .select { |key, _| key.include?('/') }
+                                    .transform_values do |cop_configuration|
+            cop_configuration.slice('SupportedStyles')
+          end
+          result = Traversal.call(traversal_configuration, dependencies).map do |variant|
+            new_configuration = Marshal.load(Marshal.dump(@raw_configuration))
+            new_configuration.each do |key, value|
+              next unless key.include?('/')
+
+              value['Enabled'] = false unless key == 'Lint/Syntax'
+            end
+            variant.each do |cop_name, attributes|
+              next if attributes.empty?
+
+              new_configuration.fetch(cop_name)['EnforcedStyle'] = attributes.fetch('SupportedStyles')
+              new_configuration.fetch(cop_name)['Enabled'] = true
+            end
+            new_configuration
+          end
+          result
+        end
       end
 
       def variants_count = variants.size
-
-      def basic_variants
-        Array.new(@max_supported_styles_count) do |index|
-          new_configuration = Marshal.load(Marshal.dump(@raw_configuration)) # dirty, should be lazy collection
-          new_configuration.each_value do |value|
-            next unless value.is_a?(Hash) && value.key?('SupportedStyles')
-
-            supported_styles = value.fetch('SupportedStyles')
-
-            value['EnforcedStyle'] = supported_styles[index.clamp(..supported_styles.size - 1)]
-          end
-
-          [new_configuration, nil]
-        end
-      end
-
-      def dependent_variants # rubocop:disable Metrics
-        variants = []
-
-        dependencies.each do |primary_cop_name, possible_dependent_cop_names|
-          next unless @raw_configuration.fetch(primary_cop_name).key?('SupportedStyles')
-
-          primary_cop_supported_styles = @raw_configuration.fetch(primary_cop_name).fetch('SupportedStyles')
-          dependent_cop_names = possible_dependent_cop_names.select do
-            @raw_configuration[it].key?('SupportedStyles')
-          end
-          next if dependent_cop_names.empty?
-
-          dependent_cop_supported_styles = dependent_cop_names.map { @raw_configuration[it].fetch('SupportedStyles') }
-
-          all_cops = [primary_cop_supported_styles, *dependent_cop_supported_styles]
-          all_cops.reduce(&:product).map(&:flatten).each do |conf|
-            new_configuration = Marshal.load(Marshal.dump(@raw_configuration)) # dirty, should be lazy collection
-            new_configuration[primary_cop_name]['EnforcedStyle'] = conf[0]
-            conf[1..].each_with_index do |style, index|
-              new_configuration[dependent_cop_names[index]]['EnforcedStyle'] = style
-            end
-
-            variants << [new_configuration, [primary_cop_name, *dependent_cop_names]]
-          end
-        end
-
-        variants
-      end
 
       private
 
