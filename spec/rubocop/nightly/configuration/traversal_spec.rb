@@ -15,8 +15,6 @@ RSpec.describe RuboCop::Nightly::Configuration::Traversal do
       expect_pairwise_coverage(configuration)
     end
 
-    # Exploring dependent cops jointly is the entire point of passing `dependencies` in, so
-    # assert it: every (cop value, dependency value) pairing must occur in some variant.
     def expect_pairwise_coverage(configuration)
       each_dependency_pair do |cop_name, dependency_name|
         expect(observed_pairs(configuration, cop_name, dependency_name))
@@ -86,8 +84,6 @@ RSpec.describe RuboCop::Nightly::Configuration::Traversal do
 
       let(:dependencies) { { 'Dep-1/Cop-1' => ['Dep-1/Cop-2'] } }
 
-      # Dependent cops are explored jointly, so every pairing of their styles is covered —
-      # unlike the independent case above, which only needs two variants.
       specify do
         expect(perform(cops, dependencies)).to contain_exactly(
           { 'Dep-1/Cop-1' => { 'Attr' => 'a' }, 'Dep-1/Cop-2' => { 'Attr' => 'c' } },
@@ -116,7 +112,6 @@ RSpec.describe RuboCop::Nightly::Configuration::Traversal do
       end
     end
 
-    # Such a cop contributed only its dependencies' keys, so no variant ever enabled it.
     context 'with a cop that has dependencies but no attributes of its own' do
       let(:cops) do
         {
@@ -176,8 +171,6 @@ RSpec.describe RuboCop::Nightly::Configuration::Traversal do
       it { expect_be_a_total_configuration(perform(cops, dependencies), total: 4) }
     end
 
-    # Exhaustively crossing one cop's own axes is what drives the variant count, and each
-    # variant is a full RuboCop pass over the corpus.
     context 'with a cop that has three attributes' do
       subject(:configuration) { perform(cops, dependencies) }
 
@@ -193,8 +186,6 @@ RSpec.describe RuboCop::Nightly::Configuration::Traversal do
 
       let(:dependencies) { {} }
 
-      # 36 rows exhaustively; 12 is the pairwise optimum here, since the 3-value and
-      # 4-value attributes alone contribute 12 distinct pairs and each row covers one.
       it 'needs 12 variants rather than the 36-row cross product' do
         expect(configuration.size).to eq(12)
       end

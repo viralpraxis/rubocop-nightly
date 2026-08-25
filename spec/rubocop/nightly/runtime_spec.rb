@@ -72,8 +72,6 @@ RSpec.describe RuboCop::Nightly::Runtime do
       end
     end
 
-    # Launching via `bundle exec` used to leak the parent's bundle into the child, which then
-    # booted against the wrong Gemfile and died with "the git source is not yet checked out".
     context 'when running inside an activated Bundler environment' do
       around do |example|
         with_environment_variable('BUNDLE_LOCKFILE', '/parent/Gemfile.lock') do

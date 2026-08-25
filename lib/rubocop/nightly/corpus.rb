@@ -4,14 +4,6 @@ require 'digest'
 
 module RuboCop
   module Nightly
-    # Expands the entries a source yields (gem directories, repository checkouts, plain files)
-    # into the individual Ruby files to inspect, dropping files whose content has already been
-    # seen.
-    #
-    # Parsing is the dominant cost of a fuzzing run and corpora repeat themselves heavily: a
-    # gem published for ten platforms ships ten byte-identical copies of its library, and
-    # vendored files recur across gems. On a 50-gem sample of rubygems.org, 17,613 Ruby files
-    # collapse to 6,541 distinct ones — 62.9% of the parsing was redundant.
     class Corpus
       RUBY_EXTENSIONS = %w[
         arb axlsx builder fcgi gemfile gemspec god jb jbuilder mspec opal pluginspec podspec
@@ -54,8 +46,6 @@ module RuboCop
         end.sort
       end
 
-      # Filtering by name before hashing keeps the digest pass off git packfiles and other
-      # large non-Ruby content that a repository checkout drags along.
       def ruby_file?(path)
         return false unless File.file?(path)
 
@@ -67,8 +57,6 @@ module RuboCop
         paths.each_with_object({}) { |path, representatives| representatives[digest(path)] ||= path }.values
       end
 
-      # An unreadable file is kept rather than dropped: inspecting it and letting RuboCop
-      # report the problem is more useful than silently removing it from the corpus.
       def digest(path)
         Digest::SHA256.file(path).hexdigest
       rescue SystemCallError => e

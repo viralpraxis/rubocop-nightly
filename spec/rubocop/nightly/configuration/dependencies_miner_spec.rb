@@ -27,7 +27,6 @@ RSpec.describe RuboCop::Nightly::Configuration::DependenciesMiner do
         .to eq('Metrics/AbcSize' => Set['Metrics/MethodLength'])
     end
 
-    # `tr!` is character-wise, so it used to turn "Rspec/MessageSpies" into "RSpec/MeSSageSpieS".
     it 'handles RSpec cop names without mangling every lowercase s' do
       write_cop('rspec/message_spies.rb', "class MessageSpies < Base\n  'RSpec/DescribedClass'\nend")
 
@@ -82,7 +81,6 @@ RSpec.describe RuboCop::Nightly::Configuration::DependenciesMiner do
       expect(described_class.new(%w[Style/Thing]).mine).to be_empty
     end
 
-    # The ABI directory used to be hardcoded to ruby/3.4.0.
     context 'when the gems were installed under a different ruby ABI' do
       let(:ruby_abi) { '4.0.0' }
 

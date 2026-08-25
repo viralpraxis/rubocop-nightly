@@ -6,7 +6,7 @@ module RuboCop
       # Batches are counted in files, not source entries. A whole 50-gem corpus in one batch
       # meant a single timeout lost every result; at 1000 files the RuboCop start-up cost
       # (~0.5s against ~0.05s per file) stays around 1% while the blast radius drops ~17x.
-      DEFAULT_OPTIONS = { batch_size: 1000, batch_timeout: nil, log_level: 'INFO' }.freeze
+      DEFAULT_OPTIONS = { batch_size: 1000, batch_timeout: nil, log_level: 'INFO', reduce: false }.freeze
       LOG_LEVELS = %w[DEBUG INFO WARN ERROR FATAL UNKNOWN].freeze
 
       Result = Data.define(:errors, :failed_batches) do
@@ -54,7 +54,7 @@ module RuboCop
       # in the exit status.
       def process(batch, index)
         RuboCop::Nightly::Commands::Fuzzer::Runner
-          .new(batch, configuration:, timeout: batch_timeout, errors: @errors)
+          .new(batch, configuration:, timeout: batch_timeout, errors: @errors, reduce: options.fetch(:reduce))
           .run
       rescue ExecutionTimeout
         @failed_batches += 1

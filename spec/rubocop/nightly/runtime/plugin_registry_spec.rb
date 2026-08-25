@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 RSpec.describe RuboCop::Nightly::Runtime::PluginRegistry do
+  let(:configured) { YAML.safe_load_file(described_class::CONFIGURATION_FILEPATH) || [] }
+
   describe '.all' do
     it 'is a frozen array' do
       expect(described_class.all).to be_an(Array).and be_frozen
@@ -10,12 +12,12 @@ RSpec.describe RuboCop::Nightly::Runtime::PluginRegistry do
       expect(described_class.all).to all(be_an(Hash).and(be_frozen))
     end
 
-    it 'is not empty' do
-      expect(described_class.all).not_to be_empty
+    it 'selects exactly the plugin entries from the configuration' do
+      expect(described_class.all).to eq(configured.select { it['type'] == 'plugin' })
     end
 
-    it 'only contains plugin entries' do
-      expect(described_class.all.map { it['type'] }.uniq).to eq(['plugin'])
+    it 'excludes core entries' do
+      expect(described_class.all.map { it['type'] }).to all(eq('plugin'))
     end
   end
 
@@ -28,18 +30,20 @@ RSpec.describe RuboCop::Nightly::Runtime::PluginRegistry do
       expect(described_class.all_names).to be_an(Array).and all(be_a(String).and(be_frozen))
     end
 
-    it 'is not empty' do
-      expect(described_class.all_names).not_to be_empty
+    it 'is the name of every plugin entry' do
+      expect(described_class.all_names).to eq(described_class.all.map { it.fetch('name') })
     end
   end
 
-  # The configuration used to be read from a CWD-relative path at require time, so the
-  # library could only be loaded from the repository root.
   describe 'configuration lookup' do
     it 'is anchored to the gem rather than the working directory' do
-      Dir.chdir(Dir.tmpdir) do
-        expect(described_class.all_names).not_to be_empty
-      end
+      from_elsewhere = Dir.chdir(Dir.tmpdir) { described_class.all_names }
+
+      expect(from_elsewhere).to eq(described_class.all_names)
+    end
+
+    it 'does not raise from an unrelated working directory' do
+      expect { Dir.chdir(Dir.tmpdir) { described_class.all } }.not_to raise_error
     end
   end
 end

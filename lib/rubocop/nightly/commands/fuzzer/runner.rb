@@ -9,11 +9,11 @@ module RuboCop
     module Commands
       module Fuzzer
         class Runner < Runner::Base
-          ErrorDetails = Data.define(:cop_name, :source_pointer)
+          ErrorDetails = Fuzzer::ErrorDetails
 
           # Everything one RuboCop invocation produced. Its stdout used to be discarded
           # outright, leaving nothing to inspect when a cop crashed.
-          Outcome = Data.define(:index, :configuration_path, :stdout, :stderr)
+          Outcome = Data.define(:index, :configuration_path, :stdout, :stderr, :variant)
 
           ERROR_MESSAGE_REGEXP = /
             An\ error\ occurred\ while\ (?<cop_name>.+)\ cop\ was\ inspecting\ (?<source_pointer>.+?)\.?\z
@@ -35,13 +35,14 @@ module RuboCop
 
           # `errors` is supplied by the caller so that a cop crash seen in an earlier batch is
           # not reported again in every subsequent one.
-          def initialize(target_paths, configuration: nil, timeout: nil, errors: Set.new)
+          def initialize(target_paths, configuration: nil, timeout: nil, errors: Set.new, reduce: false)
             super()
 
             @target_paths = [*target_paths]
             @configuration = configuration || self.class.build_configuration
             @timeout = timeout
             @errors = errors
+            @reduce = reduce
           end
 
           def run
@@ -61,14 +62,14 @@ module RuboCop
 
           private
 
-          attr_reader :target_paths, :configuration, :errors
+          attr_reader :target_paths, :configuration, :errors, :reduce
 
           def run_variant(configuration_variant, index, configuration_path, deadline)
             File.write(configuration_path, configuration_variant.to_yaml)
             RuboCop::Nightly.logger.debug "Running iteration #{index}"
 
             stdout, stderr, status = invoke_rubocop(configuration_path, remaining_time(deadline))
-            outcome = Outcome.new(index:, configuration_path:, stdout:, stderr:)
+            outcome = Outcome.new(index:, configuration_path:, stdout:, stderr:, variant: configuration_variant)
 
             RuboCop::Nightly.logger.error(stderr_without_common_issues(stderr)) if status.exitstatus == 2
 
@@ -102,6 +103,9 @@ module RuboCop
               RuboCop::Nightly.logger.error(
                 "[#{reproduction_path}] #{error_detail.cop_name}: #{error_detail.source_pointer}"
               )
+              # Every crash gets an MRE. `--reduce` only decides whether it is minimised first;
+              # without it the example simply runs RuboCop against the whole offending file.
+              Reproduction.write_mre(error_detail, outcome.variant, reproduction_path, reduce:)
             end
           end
 

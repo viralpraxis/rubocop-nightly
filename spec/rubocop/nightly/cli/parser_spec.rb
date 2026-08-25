@@ -69,6 +69,22 @@ RSpec.describe RuboCop::Nightly::CLI::Parser do
         expect(parse('fuzzer', '--source', 'rubygems').batch_size).to eq(1000)
       end
 
+      it 'does not reduce by default' do
+        expect(parse('fuzzer', '--source', 'rubygems').reduce).to be(false)
+      end
+
+      it 'enables reduction with --reduce' do
+        expect(parse('fuzzer', '--source', 'rubygems', '--reduce').reduce).to be(true)
+      end
+
+      it 'accepts an explicit --no-reduce' do
+        expect(parse('fuzzer', '--source', 'rubygems', '--no-reduce').reduce).to be(false)
+      end
+
+      it 'passes the choice through to the executor' do
+        expect(parse('fuzzer', '--source', 'rubygems', '--reduce').executor_options).to include(reduce: true)
+      end
+
       it 'accepts --batch-timeout on both its short and long form', :aggregate_failures do
         expect(parse('fuzzer', '--source', 'rubygems', '-t', '5').batch_timeout).to eq(5)
         expect(parse('fuzzer', '--source', 'rubygems', '--batch-timeout', '5').batch_timeout).to eq(5)

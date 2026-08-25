@@ -36,6 +36,13 @@ require_relative 'nightly/commands/compare/revision_specification'
 require_relative 'nightly/commands/compare/report'
 require_relative 'nightly/commands/compare/runner'
 
+require_relative 'nightly/commands/fuzzer/error_details'
+require_relative 'nightly/commands/fuzzer/budget'
+require_relative 'nightly/commands/fuzzer/signature'
+require_relative 'nightly/commands/fuzzer/minimal_configuration'
+require_relative 'nightly/commands/fuzzer/oracle'
+require_relative 'nightly/commands/fuzzer/reducer'
+require_relative 'nightly/commands/fuzzer/reduction'
 require_relative 'nightly/commands/fuzzer/reproduction'
 require_relative 'nightly/commands/fuzzer/runner'
 

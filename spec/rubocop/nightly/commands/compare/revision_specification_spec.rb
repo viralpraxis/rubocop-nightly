@@ -18,8 +18,6 @@ RSpec.describe RuboCop::Nightly::Commands::Compare::RevisionSpecification do
       end
     end
 
-    # This used to fall through to the RuboCop repository because the discriminator was the
-    # substring '.git:', which a plain URL does not contain.
     context 'with a repository URL and no revision' do
       it 'keeps the given repository', :aggregate_failures do
         result = parse('https://github.com/rails/rails.git', repository_only: true)

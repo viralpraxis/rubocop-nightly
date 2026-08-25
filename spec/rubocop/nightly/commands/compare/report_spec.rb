@@ -24,8 +24,6 @@ RSpec.describe RuboCop::Nightly::Commands::Compare::Report do
       expect(result.removed_offenses.flat_map { it.last.to_a }.map(&:cop_name)).to eq(['Lint/Void'])
     end
 
-    # The two revisions do not necessarily inspect the same files; this used to raise KeyError
-    # after both expensive RuboCop runs had already completed.
     context 'when the two runs inspected different files' do
       it 'does not raise when a file exists only in the newer run' do
         expect { call(report([file('/src/a.rb')]), report([file('/src/a.rb'), file('/src/b.rb')])) }
