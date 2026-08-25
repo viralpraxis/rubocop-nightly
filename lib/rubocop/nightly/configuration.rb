@@ -4,73 +4,19 @@ require 'yaml'
 
 module RuboCop
   module Nightly
-    class Configuration # rubocop:disable Metrics/ClassLength
+    class Configuration
+      COP_NAME_PATTERN = %r{\A[A-Z]\w*(?:/[A-Z]\w*)+\z}
+
       class << self
-        def build(
-          raw_configuration = nil,
-          enable_all_cops: false,
-          remove_plugins: false,
-          keep_core_departments: false
-        )
-          raw_configuration ||= load_configuration_from_rubocop_executable(require_plugins: !remove_plugins)
-          apply_configuration_corrections(raw_configuration)
+        def build(...) = new(Builder.call(...))
 
-          remove_plugins(raw_configuration) if remove_plugins
-          enable_all_cops(raw_configuration) if enable_all_cops
-          keep_core_departments(raw_configuration) if keep_core_departments
-
-          new(raw_configuration)
-        end
-
-        private
-
-        def load_configuration_from_rubocop_executable(require_plugins: false)
-          RuboCop::Nightly::Runtime
-            .execute('--show-cops', require_plugins:)
-            .fetch(0)
-            .then { YAML.load(it, permitted_classes: [Regexp, Symbol]) }
-        end
-
-        def apply_configuration_corrections(raw_configuration) # rubocop:disable Metrics
-          raw_configuration['plugins'] =
-            RuboCop::Nightly::Runtime::PluginRegistry
-            .all_names
-          # .map { |plugin_name| RuboCop::Nightly::Runtime.plugin_require_path(plugin_name).to_s }
-
-          if raw_configuration.key?('Style/Copyright')
-            raw_configuration['Style/Copyright']['AutocorrectNotice'] =
-              'Copyright 2025 Acme Inc'
-          end
-
-          if raw_configuration.key?('Style/ArgumentsForwarding')
-            raw_configuration['Style/ArgumentsForwarding'].delete('AllowOnlyRestArgument')
-          end
-
-          raw_configuration.each_value do |cop_configuration|
-            next unless cop_configuration.is_a?(Hash) && cop_configuration.key?('Enabled')
-
-            cop_configuration['Enabled'] = true
-          end
-        end
-
-        def enable_all_cops(raw_configuration)
-          raw_configuration.transform_values do |value|
-            value.tap { it['Enabled'] = true }
-          end
-        end
-
-        def remove_plugins(raw_configuration)
-          raw_configuration.delete('require')
-          raw_configuration.delete('plugins')
-        end
-
-        def keep_core_departments(raw_configuration)
-          raw_configuration.select! { |k, _| RuboCop::Nightly::Runtime::CORE_DEPARTMENTS.any? { k.start_with?(it) } }
-        end
+        # Marshal round-trip is the cheapest deep copy for the plain Hash/Array/String trees
+        # that make up a RuboCop configuration.
+        def deep_copy(object) = Marshal.load(Marshal.dump(object))
       end
 
       def to_yaml
-        YAML.dump(@raw_configuration)
+        YAML.dump(raw_configuration)
       end
 
       def dependencies
@@ -78,58 +24,30 @@ module RuboCop
       end
 
       def cop_names
-        @cop_names ||= raw_configuration.keys.grep(%r{[A-Z][a-z]+/[A-Z][a-z]+})
+        @cop_names ||= raw_configuration.keys.grep(COP_NAME_PATTERN)
+      end
+
+      # Maps, per cop, each `Supported*` list to the `Enforced*` key it configures. The
+      # pairing is derived by normalising both names — RuboCop's naming is not mechanically
+      # derivable, `SupportedStylesAlignWith` pairs with `EnforcedStyleAlignWith` — and falls
+      # back to the conventional name when the cop does not declare its partner explicitly.
+      def style_parameters
+        @style_parameters ||= cop_names.to_h { [it, style_parameters_for(it)] }
       end
 
       def variants
-        @variants ||= basic_variants + dependent_variants
+        @variants ||= begin
+          template = Marshal.dump(raw_configuration)
+
+          Traversal.call(traversal_configuration, dependencies).map do |variant|
+            apply_variant(self.class.deep_copy_from(template), variant)
+          end
+        end
       end
 
       def variants_count = variants.size
 
-      def basic_variants
-        Array.new(@max_supported_styles_count) do |index|
-          new_configuration = Marshal.load(Marshal.dump(@raw_configuration)) # dirty, should be lazy collection
-          new_configuration.each_value do |value|
-            next unless value.is_a?(Hash) && value.key?('SupportedStyles')
-
-            supported_styles = value.fetch('SupportedStyles')
-
-            value['EnforcedStyle'] = supported_styles[index.clamp(..supported_styles.size - 1)]
-          end
-
-          [new_configuration, nil]
-        end
-      end
-
-      def dependent_variants # rubocop:disable Metrics
-        variants = []
-
-        dependencies.each do |primary_cop_name, possible_dependent_cop_names|
-          next unless @raw_configuration.fetch(primary_cop_name).key?('SupportedStyles')
-
-          primary_cop_supported_styles = @raw_configuration.fetch(primary_cop_name).fetch('SupportedStyles')
-          dependent_cop_names = possible_dependent_cop_names.select do
-            @raw_configuration[it].key?('SupportedStyles')
-          end
-          next if dependent_cop_names.empty?
-
-          dependent_cop_supported_styles = dependent_cop_names.map { @raw_configuration[it].fetch('SupportedStyles') }
-
-          all_cops = [primary_cop_supported_styles, *dependent_cop_supported_styles]
-          all_cops.reduce(&:product).map(&:flatten).each do |conf|
-            new_configuration = Marshal.load(Marshal.dump(@raw_configuration)) # dirty, should be lazy collection
-            new_configuration[primary_cop_name]['EnforcedStyle'] = conf[0]
-            conf[1..].each_with_index do |style, index|
-              new_configuration[dependent_cop_names[index]]['EnforcedStyle'] = style
-            end
-
-            variants << [new_configuration, [primary_cop_name, *dependent_cop_names]]
-          end
-        end
-
-        variants
-      end
+      def self.deep_copy_from(dumped) = Marshal.load(dumped) # rubocop:disable Security/MarshalLoad
 
       private
 
@@ -137,9 +55,69 @@ module RuboCop
 
       def initialize(raw_configuration)
         @raw_configuration = raw_configuration
-        @max_supported_styles_count = raw_configuration.map do |_, value|
-          value.is_a?(Hash) ? value.fetch('SupportedStyles', []).size : 0
-        end.max.clamp(1..)
+      end
+
+      # Not every `Supported*` key is a style axis: `Style/YodaExpression` has
+      # `SupportedOperators` and `Layout/MultilineAssignmentLayout` has `SupportedTypes`,
+      # neither of which names an `Enforced*` parameter. Writing an invented key there makes
+      # RuboCop warn and ignore it, so only genuine pairs are kept.
+      def style_parameters_for(cop_name)
+        cop_configuration = raw_configuration[cop_name]
+        return {} unless cop_configuration.is_a?(Hash)
+
+        enforced = cop_configuration.keys.grep(/\AEnforced/).to_h { [normalize_style_key(it), it] }
+
+        cop_configuration.keys.grep(/\ASupported/).filter_map do |key|
+          partner = enforced[normalize_style_key(key)] || implicit_enforced_key(key)
+          [key, partner] if partner
+        end.to_h
+      end
+
+      def traversal_configuration
+        cop_names.to_h do |cop_name|
+          [cop_name, raw_configuration[cop_name].slice(*style_parameters.fetch(cop_name, {}).keys)]
+        end
+      end
+
+      def apply_variant(configuration, variant)
+        disable_cops(configuration)
+
+        variant.each do |cop_name, attributes|
+          cop_configuration = configuration[cop_name]
+          next unless cop_configuration.is_a?(Hash)
+
+          # A cop with no configurable styles still has to run — it just has a single variant.
+          cop_configuration['Enabled'] = true
+          apply_attributes(cop_configuration, cop_name, attributes)
+        end
+
+        configuration
+      end
+
+      def disable_cops(configuration)
+        configuration.each do |key, value|
+          next unless value.is_a?(Hash) && COP_NAME_PATTERN.match?(key) && key != 'Lint/Syntax'
+
+          value['Enabled'] = false
+        end
+      end
+
+      def apply_attributes(cop_configuration, cop_name, attributes)
+        attributes.each do |supported_key, value|
+          enforced_key = style_parameters.dig(cop_name, supported_key)
+          cop_configuration[enforced_key] = value if enforced_key
+        end
+      end
+
+      def normalize_style_key(key)
+        key.delete_prefix('Supported').delete_prefix('Enforced').delete('s')
+      end
+
+      # `SupportedStyles`/`EnforcedStyle` is universal in RuboCop, so it is assumed even when
+      # a configuration omits the `Enforced` half (hand-written configs often do). Every other
+      # `Supported*` key must name its partner explicitly.
+      def implicit_enforced_key(key)
+        'EnforcedStyle' if key == 'SupportedStyles'
       end
     end
   end

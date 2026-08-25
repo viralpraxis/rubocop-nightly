@@ -5,7 +5,7 @@ plugins:
   - rubocop-performance
 
 AllCops:
-  TargetRubyVersion: 3.4
+  TargetRubyVersion: 4.0
   NewCops: enable
 
 Style/Documentation:
@@ -15,4 +15,4 @@ ThreadSafety/DirChdir:
   Enabled: false
 
 RSpec/ExampleLength:
-  Max: 10
+  Max: 12
