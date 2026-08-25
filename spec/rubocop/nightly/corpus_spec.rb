@@ -28,7 +28,6 @@ RSpec.describe RuboCop::Nightly::Corpus do
       expect(described_class.new([root]).files).to contain_exactly(rakefile)
     end
 
-    # A gem published for ten platforms ships ten byte-identical copies of its library.
     it 'keeps one representative per distinct content', :aggregate_failures do
       write('x86/lib/thing.rb', 'identical')
       write('arm/lib/thing.rb', 'identical')
@@ -40,8 +39,6 @@ RSpec.describe RuboCop::Nightly::Corpus do
       expect(files).to include(distinct)
     end
 
-    # Paths are sorted before deduplication, so the representative does not depend on the
-    # order the filesystem happened to return.
     it 'is deterministic about which duplicate it keeps' do
       write('b/thing.rb', 'identical')
       first = write('a/thing.rb', 'identical')

@@ -11,7 +11,12 @@ RSpec.describe RuboCop::Nightly do
     end
 
     it 'writes to stderr so it cannot corrupt the compare command report on stdout' do
+      silenced = described_class.logger
+      described_class.instance_variable_set(:@logger, nil)
+
       expect(described_class.logger.instance_variable_get(:@logdev).dev).to be($stderr)
+    ensure
+      described_class.instance_variable_set(:@logger, silenced)
     end
   end
 end

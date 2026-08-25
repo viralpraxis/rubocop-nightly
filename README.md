@@ -108,6 +108,16 @@ All sources support the following CLI options:
    its `--parallel` workers are killed by process group, so a cop that hangs on a pathological
    file cannot stall the run.
 
+- `--reduce` (default: off)
+
+   After a crash is detected, shrink it to a minimal reproducible example: the offending cop
+   alone, a few lines of configuration, and the smallest source that still triggers it. Writes
+   `repro.rb`, `repro.yml` and a runnable `repro.sh` next to the raw reproduction.
+
+   It costs a handful of extra RuboCop invocations per distinct crash (typically 2–6, a few
+   seconds), but a large input can take considerably longer, so it is opt-in. Use `--no-reduce`
+   to be explicit.
+
 - `--log-level` (default: `INFO`)
 
    One of `DEBUG`, `INFO`, `WARN`, `ERROR`, `FATAL`, `UNKNOWN`. Logs go to stderr, so the

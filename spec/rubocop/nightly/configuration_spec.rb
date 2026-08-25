@@ -30,8 +30,6 @@ RSpec.describe RuboCop::Nightly::Configuration do
       expect { build(raw) }.not_to(change { Marshal.dump(raw) })
     end
 
-    # `rubocop --show-cops` emits no AllCops section, so without this RuboCop analyses
-    # everything as Ruby 2.7 and modern syntax is reported as a syntax error.
     describe 'AllCops' do
       subject(:all_cops) { YAML.safe_load(build(raw).to_yaml).fetch('AllCops') }
 
@@ -146,7 +144,6 @@ RSpec.describe RuboCop::Nightly::Configuration do
         .to eq('SupportedHashRocketStyles' => 'EnforcedHashRocketStyle')
     end
 
-    # Not mechanically derivable by stripping a trailing 's'.
     it 'pairs SupportedStylesAlignWith with EnforcedStyleAlignWith' do
       expect(parameters.fetch('Layout/EndAlignment'))
         .to eq('SupportedStylesAlignWith' => 'EnforcedStyleAlignWith')
@@ -156,8 +153,6 @@ RSpec.describe RuboCop::Nightly::Configuration do
   describe '#variants' do
     subject(:variants) { build(raw).variants }
 
-    # Every cop without SupportedStyles used to stay Enabled: false in *every* variant, so
-    # the fuzzer never ran them. They only need one variant each, but it must not be zero.
     it 'enables a cop that has no configurable styles' do
       expect(variants.count { it.dig('Metrics/AbcSize', 'Enabled') }).to be >= 1
     end

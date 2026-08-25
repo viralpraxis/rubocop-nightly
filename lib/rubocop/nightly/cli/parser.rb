@@ -6,7 +6,6 @@ require 'optparse'
 module RuboCop
   module Nightly
     class CLI
-      # Raised for anything the user can fix by reading the usage text.
       class UsageError < RuboCop::Nightly::Error
       end
 
@@ -33,7 +32,8 @@ module RuboCop
           :git_sources,
           :batch_size,
           :batch_timeout,
-          :log_level
+          :log_level,
+          :reduce
         ) do
           def initialize( # rubocop:disable Metrics/ParameterLists
             source:,
@@ -41,7 +41,8 @@ module RuboCop
             git_sources: nil,
             batch_size: BATCH_SIZE_DEFAULT,
             batch_timeout: nil,
-            log_level: 'INFO'
+            log_level: 'INFO',
+            reduce: false
           )
             super
           end
@@ -55,7 +56,7 @@ module RuboCop
           end
 
           def executor_options
-            { batch_size:, batch_timeout:, log_level: }
+            { batch_size:, batch_timeout:, log_level:, reduce: }
           end
 
           def command = :fuzzer
@@ -80,7 +81,9 @@ module RuboCop
           ['-m MIRROR_PATH', '--mirror-path MIRROR_PATH', 'Mirror data directory path', :mirror_path, nil],
           ['-g GIT_SOURCES', '--git-sources GIT_SOURCES', 'Path to a git sources YAML file',
            :git_sources_path, nil],
-          ['-l LOG_LEVEL', '--log-level LOG_LEVEL', 'Log level', :log_level, nil]
+          ['-l LOG_LEVEL', '--log-level LOG_LEVEL', 'Log level', :log_level, nil],
+          ['-R', '--[no-]reduce', 'Reduce each crash to a minimal reproducible example (off by default)',
+           :reduce, nil]
         ].freeze
         private_constant :FUZZER_SWITCHES
 
@@ -220,8 +223,6 @@ module RuboCop
             arguments[:git_sources] = load_git_sources(path)
           end
 
-          # Loaded here rather than inside the OptionParser callback so that a missing or
-          # malformed file produces a usage error instead of a raw Errno/Psych backtrace.
           def load_git_sources(path)
             sources = YAML.safe_load_file(path)
 

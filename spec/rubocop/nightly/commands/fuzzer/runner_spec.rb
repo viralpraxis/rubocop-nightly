@@ -3,8 +3,6 @@
 RSpec.describe RuboCop::Nightly::Commands::Fuzzer::Runner do
   subject(:runner) { described_class.new(['/a.rb'], configuration: configuration) }
 
-  # The runner chdirs into the gems data directory; give it a real one so these stay unit
-  # tests instead of silently depending on `rake gems:install` having been run.
   let(:data_home) { Dir.mktmpdir('rubocop-nightly-spec') }
   let(:clean_run) { ['', '', instance_double(Process::Status, success?: true, exitstatus: 0)] }
 
@@ -18,6 +16,10 @@ RSpec.describe RuboCop::Nightly::Commands::Fuzzer::Runner do
   end
 
   before { allow(RuboCop::Nightly::Runtime).to receive(:execute).and_return(clean_run) }
+
+  def reproduction_directories
+    Pathname.glob(RuboCop::Nightly::Runtime.data_directory.join('fuzzer/reproductions/*')).sort
+  end
 
   def executed_arguments
     expect(RuboCop::Nightly::Runtime).to have_received(:execute) do |*arguments, **|
@@ -126,19 +128,27 @@ RSpec.describe RuboCop::Nightly::Commands::Fuzzer::Runner do
         expect(RuboCop::Nightly.logger).to have_received(:error).with(%r{reproductions/variant-0.*bug\.rb:1:15})
       end
 
-      # RuboCop's own output is the only record of what it actually said.
       it 'preserves stdout, stderr, the config and the targets', :aggregate_failures do
         allow(RuboCop::Nightly::Runtime).to receive(:execute).and_return(
           ['inspecting things', stderr, instance_double(Process::Status, success?: true, exitstatus: 0)]
         )
 
         runner.run
-        directory = RuboCop::Nightly::Runtime.data_directory.join('fuzzer/reproductions/variant-0')
+        directory = reproduction_directories.fetch(0)
 
         expect(File.read(directory.join('stdout.log'))).to eq('inspecting things')
         expect(File.read(directory.join('stderr.log'))).to eq(stderr)
         expect(File.read(directory.join('targets.txt'))).to eq("/a.rb\n")
         expect(YAML.safe_load_file(directory.join('configuration.yml'))).to include('Department/CopName1')
+      end
+
+      it 'does not let one batch overwrite another batch reproduction', :aggregate_failures do
+        described_class.new(['/a.rb'], configuration: configuration).run
+        described_class.new(['/b.rb'], configuration: configuration).run
+
+        expect(reproduction_directories.size).to eq(2)
+        expect(reproduction_directories.map { File.read(it.join('targets.txt')) })
+          .to contain_exactly("/a.rb\n", "/b.rb\n")
       end
 
       it 'does not re-report an error already seen in an earlier batch' do

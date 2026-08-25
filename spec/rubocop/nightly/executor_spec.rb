@@ -3,7 +3,6 @@
 RSpec.describe RuboCop::Nightly::Executor do
   let(:source) { instance_double(RuboCop::Nightly::Source::Rubygems, fetch: paths) }
   let(:root) { Dir.mktmpdir('rubocop-nightly-executor') }
-  # Real files with distinct content: the Executor deduplicates the corpus before batching.
   let(:paths) do
     %w[a b c].map { |name| File.join(root, "#{name}.rb").tap { |p| File.write(p, "# #{name}\n") } }
   end
@@ -16,11 +15,16 @@ RSpec.describe RuboCop::Nightly::Executor do
       .to receive_messages(new: runner, build_configuration: :configuration)
   end
 
-  # Executor sets the global log level from its options; keep the suite output quiet.
   def build(**options) = described_class.new(source, { log_level: 'FATAL' }.merge(options))
 
   describe '#call' do
-    # The default `options = {}` used to raise KeyError on the first fetch.
+    it 'does not reduce unless asked' do
+      build(batch_size: 3).call
+
+      expect(RuboCop::Nightly::Commands::Fuzzer::Runner).to have_received(:new).with(anything,
+                                                                                     hash_including(reduce: false))
+    end
+
     it 'works with no options at all' do
       expect { described_class.new(source).call }.not_to raise_error
     end
@@ -31,8 +35,6 @@ RSpec.describe RuboCop::Nightly::Executor do
       expect(RuboCop::Nightly::Commands::Fuzzer::Runner).to have_received(:new).twice
     end
 
-    # Building it costs a subprocess plus a full dependency-mining pass; it must not happen
-    # once per batch.
     it 'builds the configuration once for the whole run' do
       build(batch_size: 1).call
 
@@ -49,7 +51,6 @@ RSpec.describe RuboCop::Nightly::Executor do
       expect(sets.uniq(&:object_id).size).to eq(1)
     end
 
-    # Source::Rubygems used to `return` nil when nothing was published.
     context 'when the source yields nil' do
       let(:paths) { nil }
 
