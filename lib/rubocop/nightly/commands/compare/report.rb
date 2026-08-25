@@ -5,10 +5,18 @@ module RuboCop
     module Commands
       class Compare
         class Report
+          # Identity is (cop, location) — the message is deliberately excluded so that pure
+          # wording changes between two RuboCop revisions are not reported as regressions.
+          # `==` is overridden alongside `eql?`/`hash` so every comparison agrees; Data's
+          # generated `==` would otherwise also compare the message.
           Offense = Data.define(:cop_name, :location, :message) do
-            def eql?(other) = cop_name == other.cop_name && location == other.location
-            def hash = [cop_name, location].hash
+            def eql?(other) = other.is_a?(self.class) && cop_name == other.cop_name && location == other.location
+            def ==(other) = eql?(other)
+            def hash = [self.class, cop_name, location].hash
           end
+
+          EMPTY_OFFENSES = Set.new.freeze
+          private_constant :EMPTY_OFFENSES
 
           private_class_method :new
 
@@ -19,21 +27,25 @@ module RuboCop
           attr_reader :removed_offenses, :new_offenses, :source_directory_path
 
           def initialize(offenses_before, offenses_after, source_directory_path:)
-            offenses_before = plain_report_to_hashmap(offenses_before)
-            offenses_after = plain_report_to_hashmap(offenses_after)
+            before = plain_report_to_hashmap(offenses_before)
+            after = plain_report_to_hashmap(offenses_after)
 
-            @removed_offenses = find_offenses_difference(offenses_after, offenses_before)
-            @new_offenses = find_offenses_difference(offenses_before, offenses_after)
+            # The two revisions do not necessarily inspect the same files, so iterate the
+            # union: a file only one of them looked at still has to be reported.
+            paths = before.keys | after.keys
+
+            @removed_offenses = find_offenses_difference(paths, before, after)
+            @new_offenses = find_offenses_difference(paths, after, before)
             @source_directory_path = Pathname(source_directory_path)
           end
 
           private
 
-          def find_offenses_difference(lhs, rhs)
-            lhs.filter_map do |path, offenses|
-              next if (offenses_difference = rhs.fetch(path) - offenses).empty?
+          def find_offenses_difference(paths, lhs, rhs)
+            paths.filter_map do |path|
+              difference = lhs.fetch(path, EMPTY_OFFENSES) - rhs.fetch(path, EMPTY_OFFENSES)
 
-              [path, offenses_difference]
+              [path, difference] unless difference.empty?
             end
           end
 

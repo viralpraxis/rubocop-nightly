@@ -5,7 +5,13 @@ RSpec.describe RuboCop::Nightly do
     expect(RuboCop::Nightly::VERSION).not_to be_nil
   end
 
-  it 'does something useful' do
-    expect(1.succ).to eq(2)
+  describe '.logger' do
+    it 'is memoized' do
+      expect(described_class.logger).to equal(described_class.logger)
+    end
+
+    it 'writes to stderr so it cannot corrupt the compare command report on stdout' do
+      expect(described_class.logger.instance_variable_get(:@logdev).dev).to be($stderr)
+    end
   end
 end

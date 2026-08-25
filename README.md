@@ -6,7 +6,7 @@
 
 At this moment, `rubocop-nightly` is distributed as a git repository. Simply run `git clone` and you're set up.
 
-NOTE: Only MRI 3.4 is supported.
+NOTE: Only MRI 4.0 is supported (see `.ruby-version`).
 
 ## Usage
 
@@ -40,7 +40,7 @@ bin/rubocop-nightly compare --from https://github.com/viralpraxis/rubocop.git:53
 Before running RuboCop Nightly's `fuzzer` command, acquire the latest RuboCop core and plugins by executing the following Rake task:
 
 ```console
-bundle exec rake gems:fetch
+bundle exec rake gems:install
 ```
 
 This installs the preconfigured gems into either:
@@ -52,12 +52,15 @@ After setting up, you can run regression tests on Ruby code fetched from one of 
 
 1. `rubygems`
 
-   Fetch the latest 50 gem snapshots from https://rubygems.org.
+   Fetch gems published to https://rubygems.org within the last day, from the
+   [activity feed](https://rubygems.org/api/v1/activity/just_updated.json) (50 entries).
+   Platform-specific builds are fetched separately, and every download is verified against
+   the checksum the API reports.
 
    Example:
 
    ```console
-   bin/rubocop-nightly --source rubygems
+   bin/rubocop-nightly fuzzer --source rubygems
    ```
 
 2. `git`
@@ -67,34 +70,63 @@ After setting up, you can run regression tests on Ruby code fetched from one of 
    Example:
 
    ```console
-   bin/rubocop-nightly --source git --git-source ./config/git.yml
+   bin/rubocop-nightly fuzzer --source git --git-sources ./config/git.yml
    ```
 
-3. `mirror` (*expirimental*)
+   Repositories are shallow-cloned on first use and fast-forwarded to the current branch
+   tip on subsequent runs.
 
-   Currently a no-op. Designed to run rubocop-nightly against a local mirror using [`rubygems-mirror`](https://github.com/rubygems/rubygems-mirror)
+3. `mirror` (*experimental*)
+
+   Analyze a local mirror maintained with [`rubygems-mirror`](https://github.com/rubygems/rubygems-mirror).
+   The path may be a directory or a glob; either way only directories are analyzed.
 
    Example:
 
    ```console
-   bin/rubocop-nightly --source mirror --mirror-path /var/opt/rubygems-mirror/latest
+   bin/rubocop-nightly fuzzer --source mirror --mirror-path /var/opt/rubygems-mirror/latest
    ```
 
 ### CLI options
 
 All sources support the following CLI options:
 
-- `--batch-size`
+- `--batch-size` (default: `1000`)
 
-   Specifies the number of files to process per batch. If not set, rubocop-nightly will process all files in one go.
+   Number of Ruby **files** to process per batch. Source entries (extracted gems, repository
+   checkouts, mirror directories) are expanded into their Ruby files first, and files whose
+   content has already been seen are dropped — a 50-gem sample of rubygems.org collapses from
+   17,613 files to 6,541 distinct ones.
+
+   Smaller batches limit what a `--batch-timeout` loses; larger ones amortise RuboCop's
+   start-up cost (~0.5s per invocation against ~0.05s per file). The default keeps start-up
+   overhead near 1%.
 
 - `--batch-timeout`
 
-   Limits the processing time for a single batch in seconds. Useful to prevent RuboCop from hanging on large files.
+   Limits the processing time for a single batch, in seconds. On expiry the RuboCop child and
+   its `--parallel` workers are killed by process group, so a cop that hangs on a pathological
+   file cannot stall the run.
+
+- `--log-level` (default: `INFO`)
+
+   One of `DEBUG`, `INFO`, `WARN`, `ERROR`, `FATAL`, `UNKNOWN`. Logs go to stderr, so the
+   `compare` report on stdout stays machine-readable.
+
+### Exit status
+
+| Status | Meaning |
+| --- | --- |
+| `0` | Success — no cop errors detected (`fuzzer`), or no offense differences (`compare`) |
+| `1` | Cop errors detected, a batch failed, or the run could not complete |
+| `2` | Invalid command-line usage |
+
+Configurations that reproduce a detected cop error are written to
+`<data directory>/fuzzer/reproductions/` and referenced in the log line reporting the error.
 
 ## Development
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
+After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests (a few integration examples are skipped unless the fixture bundles under `spec/fixtures/gemfiles/` are installed; the skip message tells you the command). You can also run `bin/console` for an interactive prompt that will allow you to experiment.
 
 To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
 

@@ -5,20 +5,25 @@ require_relative 'lib/rubocop/nightly/version'
 Gem::Specification.new do |spec|
   spec.name = 'rubocop-nightly'
   spec.version = RuboCop::Nightly::VERSION
-  spec.authors = ['TODO: Write your name']
-  spec.email = ['TODO: Write your email address']
+  spec.authors = ['Iaroslav Kurbatov']
+  spec.email = ['iaroslav2k@gmail.com']
 
-  spec.summary = 'TODO: Write a short summary, because RubyGems requires one.'
-  spec.description = 'TODO: Write a longer description or delete this line.'
-  spec.homepage = "TODO: Put your gem's website or public repo URL here."
+  spec.summary = 'Regression testing tool for RuboCop'
+  spec.description = <<~DESCRIPTION
+    rubocop-nightly is a regression testing tool for RuboCop. It exercises core cops alongside
+    official and third-party extensions, explores RuboCop's configuration state space, and
+    analyzes Ruby code fetched from RubyGems, git repositories or a local mirror.
+  DESCRIPTION
+  spec.homepage = 'https://github.com/viralpraxis/rubocop-nightly'
   spec.license = 'MIT'
-  spec.required_ruby_version = '>= 3.4.0'
+  spec.required_ruby_version = '>= 4.0.0'
 
-  spec.metadata['allowed_push_host'] = "TODO: Set to your gem server 'https://example.com'"
+  spec.metadata['allowed_push_host'] = 'https://rubygems.org'
 
   spec.metadata['homepage_uri'] = spec.homepage
-  spec.metadata['source_code_uri'] = "TODO: Put your gem's public repo URL here."
-  spec.metadata['changelog_uri'] = "TODO: Put your gem's CHANGELOG.md URL here."
+  spec.metadata['source_code_uri'] = "#{spec.homepage}/tree/main"
+  spec.metadata['changelog_uri'] = "#{spec.homepage}/blob/main/CHANGELOG.md"
+  spec.metadata['bug_tracker_uri'] = "#{spec.homepage}/issues"
   spec.metadata['rubygems_mfa_required'] = 'true'
 
   # Specify which files should be added to the gem when it is released.
@@ -27,11 +32,11 @@ Gem::Specification.new do |spec|
   spec.files = IO.popen(%w[git ls-files -z], chdir: __dir__, err: IO::NULL) do |ls|
     ls.readlines("\x0", chomp: true).reject do |f|
       (f == gemspec) ||
-        f.start_with?(*%w[bin/ test/ spec/ features/ .git .github appveyor Gemfile])
+        f.start_with?(*%w[test/ spec/ features/ .git .github appveyor Gemfile AUDIT.md])
     end
   end
 
-  # spec.bindir = 'exe'
-  # spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
+  spec.bindir = 'bin'
+  spec.executables = ['rubocop-nightly']
   spec.require_paths = ['lib']
 end

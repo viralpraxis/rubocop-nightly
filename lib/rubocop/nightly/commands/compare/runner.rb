@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-require 'pathname'
+require 'json'
+require 'tempfile'
 require 'yaml'
 
 module RuboCop
@@ -10,100 +11,124 @@ module RuboCop
         class Runner < Runner::Base
           DATA_DIR = Pathname(File.join(RuboCop::Nightly::Runtime.data_directory, 'compare')).freeze
           RUNTIME_DIR = DATA_DIR.join('runtime').freeze
-          REPOSITORIES_DATA_DIR = DATA_DIR.join('repositores').freeze
-
-          RemoteRuntime = Data.define(:repository, :revision, :relative_path)
+          REPOSITORIES_DATA_DIR = DATA_DIR.join('repositories').freeze
 
           private_constant(*constants(false))
 
           class << self
             def call(source, from:, to:)
-              FileUtils.mkdir_p(RUNTIME_DIR.to_s)
-
               source_directory_path = fetch_source_to_analyze(source)
-              runtimes = [from, to].map { parse_revision_specification(it) }
 
-              outcomes = runtimes.map do |runtime|
-                fetch_runtime(runtime)
-                run_rubocop(runtime, source_directory_path)
+              outcomes = [from, to].map { RevisionSpecification.parse(it) }.map do |runtime|
+                run_rubocop(fetch_runtime(runtime), runtime, source_directory_path)
               end
 
               Report.call(*outcomes, source_directory_path:)
             end
 
-            def fetch_source_to_analyze(source) # rubocop:disable Metrics/MethodLength
-              revision = parse_revision_specification(source, revision_fallback: 'main')
-              repository_directory = REPOSITORIES_DATA_DIR.join(revision.relative_path)
-              FileUtils.mkdir_p(repository_directory)
+            def fetch_source_to_analyze(source)
+              specification = RevisionSpecification.parse(source, repository_only: true)
+              directory = REPOSITORIES_DATA_DIR.join(specification.relative_path, specification.checkout_name)
 
-              Dir.chdir(repository_directory) do
-                unless File.exist?('.git')
-                  system(
-                    'git', 'clone', '--depth', '1', '--branch', revision.revision, revision.repository, '.',
-                    exception: true, out: File::NULL
+              materialize(directory, specification, filter_blobs: true)
+              directory
+            end
+
+            def fetch_runtime(runtime)
+              directory = RUNTIME_DIR.join(runtime.relative_path, runtime.checkout_name)
+              materialize(directory, runtime)
+
+              Dir.chdir(directory) { system('bundle', 'install', exception: true, out: File::NULL) }
+              RuboCop::Nightly.logger.info "Successfully prepared RuboCop #{runtime.describe}"
+
+              directory
+            end
+
+            # Clones on first use and re-resolves the revision every run, so a branch tip
+            # actually advances between runs and a cached checkout is never silently reused for
+            # a different revision. Deliberately no `git pull`: after checking out a SHA or tag
+            # the repository is in detached HEAD, where pull refuses to run and aborts the job.
+            def materialize(directory, specification, filter_blobs: false)
+              FileUtils.mkdir_p(directory.dirname)
+              clone(directory, specification.repository, filter_blobs:) unless directory.join('.git').directory?
+
+              Dir.chdir(directory) do
+                system('git', 'fetch', '--force', '--tags', 'origin', exception: true, out: File::NULL)
+                system('git', 'checkout', '--detach', resolve_revision(specification.revision),
+                       exception: true, out: File::NULL)
+              end
+            end
+
+            # `--filter=blob:none` skips historical blobs; the checkout still fetches what it
+            # needs. `--branch` cannot be used because it rejects commit SHAs.
+            def clone(directory, repository, filter_blobs: false)
+              FileUtils.rm_rf(directory)
+              arguments = %w[git clone]
+              arguments.push('--filter=blob:none') if filter_blobs
+
+              return if system(*arguments, '--', repository, directory.to_s, out: File::NULL)
+
+              FileUtils.rm_rf(directory)
+              system('git', 'clone', '--', repository, directory.to_s, exception: true, out: File::NULL)
+            end
+
+            def resolve_revision(revision)
+              return 'origin/HEAD' if revision.nil?
+              return "origin/#{revision}" if remote_branch?(revision)
+
+              revision
+            end
+
+            def remote_branch?(revision)
+              system('git', 'rev-parse', '--verify', '--quiet', "origin/#{revision}^{commit}",
+                     out: File::NULL, err: File::NULL)
+            end
+
+            def run_rubocop(runtime_directory, runtime, source_directory_path)
+              Dir.chdir(runtime_directory) do
+                with_default_rubocop_configuration_file do |configuration_path|
+                  stdout, stderr, status = Runtime.execute(
+                    source_directory_path.to_s, '--cache', 'false',
+                    '--format', 'json', '-c', configuration_path
                   )
-                end
 
-                repository_directory
-              end
-            end
-
-            # FIXME: switch to using different `remote` git objects?
-            def fetch_runtime(runtime) # rubocop:disable Metrics/MethodLength
-              FileUtils.mkdir_p(RUNTIME_DIR)
-              Dir.chdir(RUNTIME_DIR) do
-                unless File.exist?(runtime.relative_path)
-                  system('git', 'clone', '--', runtime.repository, runtime.relative_path)
-                end
-
-                Dir.chdir(runtime.relative_path) do
-                  system('git', 'fetch', exception: true, out: File::NULL)
-                  system('git', 'checkout', runtime.revision, exception: true, out: File::NULL)
-                  system('bundle', 'install', exception: true, out: File::NULL)
-
-                  Nightly.logger.info "Successfully prepared RuboCop with revision #{runtime.revision}"
+                  RuboCop::Nightly.logger.warn(stderr) unless stderr.empty?
+                  parse_report(stdout, stderr, status, runtime)
                 end
               end
             end
 
-            def create_default_rubocop_configuration_file
+            # RuboCop exits 1 when it merely finds offenses, which is the normal case here;
+            # only a fatal error (2) or an unparseable report means the run cannot be trusted.
+            def parse_report(stdout, stderr, status, runtime)
+              raise ExecutionError, "RuboCop #{runtime.describe} failed: #{stderr.strip}" if status.exitstatus == 2
+
+              JSON.parse(stdout)
+            rescue JSON::ParserError => e
+              raise ExecutionError, "RuboCop #{runtime.describe} produced an unparseable report: #{e.message}"
+            end
+
+            def with_default_rubocop_configuration_file(&)
               configuration = RuboCop::Nightly::Configuration.build(
-                enable_all_cops: true,
-                remove_plugins: true,
-                keep_core_departments: true
+                enable_all_cops: true, remove_plugins: true, keep_core_departments: true
               )
 
-              configuration
-                .then(&:to_yaml)
-                .then { |configuration_data| Tempfile.create.tap { |file| file.write(configuration_data) }.path }
+              with_temporary_file(configuration.to_yaml, &)
             end
 
-            def parse_revision_specification(revision_specification, revision_fallback: nil)
-              repository, revision =
-                if revision_specification.include?('.git:')
-                  [revision_specification.split(':')[0..-2].join(':'), revision_specification.split(':')[-1]]
-                else
-                  [RuboCop::Nightly::Runtime.rubocop_repository_uri, revision_fallback || revision_specification]
-                end
+            # Written through a handle that is flushed, closed and unlinked; the previous
+            # `Tempfile.create.tap { it.write(...) }.path` left the data buffered and the
+            # file on disk forever.
+            def with_temporary_file(contents)
+              file = Tempfile.create(['rubocop-nightly-compare', '.yml'])
 
-              RemoteRuntime.new(repository:, revision:, relative_path: relative_path_for_repository_url(repository))
-            end
-
-            def relative_path_for_repository_url(repository_url)
-              URI(repository_url).path.sub(%r{^/}, '').sub(/\.git$/, '')
-            end
-
-            def run_rubocop(runtime, source_directory_path)
-              Dir.chdir(RUNTIME_DIR.join(runtime.relative_path)) do
-                rubocop_configuration_path = create_default_rubocop_configuration_file
-                stdout, stderr, = Runtime.execute(
-                  source_directory_path.to_s, '--cache',
-                  'false', '--format',
-                  'json', '-c', rubocop_configuration_path
-                )
-
-                RuboCop::Nightly.logger.warn(stderr) unless stderr.empty?
-                JSON.parse(stdout)
+              begin
+                file.write(contents)
+                file.flush
+                yield file.path
+              ensure
+                file.close
+                File.unlink(file.path)
               end
             end
           end

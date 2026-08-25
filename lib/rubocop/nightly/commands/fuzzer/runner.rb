@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'tempfile'
+require 'tmpdir'
 require 'open3'
 
 module RuboCop
@@ -10,70 +11,128 @@ module RuboCop
         class Runner < Runner::Base
           ErrorDetails = Data.define(:cop_name, :source_pointer)
 
-          CONFIGURATION_PATH = Pathname('/tmp/rubocop-nightly-configuration.yml').freeze
-          ERROR_MESSAGE_REGEXP = /An error occurred while (?<cop_name>.+) cop was inspecting (?<source_pointer>.+)\z/
+          # Everything one RuboCop invocation produced. Its stdout used to be discarded
+          # outright, leaving nothing to inspect when a cop crashed.
+          Outcome = Data.define(:index, :configuration_path, :stdout, :stderr)
+
+          ERROR_MESSAGE_REGEXP = /
+            An\ error\ occurred\ while\ (?<cop_name>.+)\ cop\ was\ inspecting\ (?<source_pointer>.+?)\.?\z
+          /x
+
           private_constant :ERROR_MESSAGE_REGEXP
 
-          def initialize(target_paths, configuration = Dir.chdir(Runtime.gems_data_directory) { Configuration.build })
+          class << self
+            def build_configuration
+              Dir.chdir(Runtime.gems_data_directory) do
+                Configuration.build(parser_engine: 'parser_prism')
+              end
+            rescue Errno::ENOENT
+              raise ConfigurationError,
+                    "RuboCop gems directory #{Runtime.gems_data_directory} does not exist — " \
+                    'run `bundle exec rake gems:install` first'
+            end
+          end
+
+          # `errors` is supplied by the caller so that a cop crash seen in an earlier batch is
+          # not reported again in every subsequent one.
+          def initialize(target_paths, configuration: nil, timeout: nil, errors: Set.new)
             super()
 
             @target_paths = [*target_paths]
-            @configuration = configuration
+            @configuration = configuration || self.class.build_configuration
+            @timeout = timeout
+            @errors = errors
           end
 
-          def run # rubocop:disable Metrics
+          def run
             super
 
-            @errors = Set.new
+            Dir.mktmpdir('rubocop-nightly') do |working_directory|
+              configuration_path = File.join(working_directory, 'configuration.yml')
+              deadline = @timeout && (monotonic_now + @timeout)
 
-            configuration.variants.each_with_index do |(configuration_variant, cops), index|
-              File.write(CONFIGURATION_PATH, configuration_variant.to_yaml)
-              RuboCop::Nightly.logger.debug "Running iteration #{index}"
-
-              _, stderr, status = Dir.chdir(Runtime.gems_data_directory) do
-                Runtime.execute(
-                  *target_paths,
-                  '-c', CONFIGURATION_PATH.to_s,
-                  '--format', 'RuboCop::Nightly::NullFormatter',
-                  '--cache', 'false',
-                  '-r', File.expand_path('../../null_formatter.rb', __dir__),
-                  *(['--only', cops.join(',')] if cops),
-                  require_plugins: true
-                )
-              end
-
-              RuboCop::Nightly.logger.error(stderr_without_common_issues(stderr)) if status.exitstatus == 2
-
-              rubocop_error_details = stderr.split("\n").grep(/An error occurred/).uniq.map { parse_error_message(it) }
-              next if rubocop_error_details.empty?
-
-              persisted_configuration_file = Tempfile.create
-              persisted_configuration_file.write(File.read(CONFIGURATION_PATH))
-              rubocop_error_details.each do |error_detail|
-                next if @errors.include?(error_detail)
-
-                @errors.add(error_detail)
-                Nightly.logger.error(
-                  "[#{persisted_configuration_file.path}] #{error_detail.cop_name}: #{error_detail.source_pointer}"
-                )
+              configuration.variants.each_with_index do |configuration_variant, index|
+                run_variant(configuration_variant, index, configuration_path, deadline)
               end
             end
 
-            nil
+            errors
           end
 
           private
 
-          attr_reader :target_paths, :configuration
+          attr_reader :target_paths, :configuration, :errors
+
+          def run_variant(configuration_variant, index, configuration_path, deadline)
+            File.write(configuration_path, configuration_variant.to_yaml)
+            RuboCop::Nightly.logger.debug "Running iteration #{index}"
+
+            stdout, stderr, status = invoke_rubocop(configuration_path, remaining_time(deadline))
+            outcome = Outcome.new(index:, configuration_path:, stdout:, stderr:)
+
+            RuboCop::Nightly.logger.error(stderr_without_common_issues(stderr)) if status.exitstatus == 2
+
+            report_errors(parse_error_details(stderr), outcome)
+          end
+
+          def invoke_rubocop(configuration_path, timeout)
+            Dir.chdir(Runtime.gems_data_directory) do
+              Runtime.execute(*rubocop_arguments(configuration_path), require_plugins: true, timeout: timeout)
+            end
+          end
+
+          def rubocop_arguments(configuration_path)
+            [
+              '-c', configuration_path,
+              '--format', 'RuboCop::Nightly::NullFormatter',
+              '--parallel',
+              '-r', File.expand_path('../../null_formatter.rb', __dir__),
+              *target_paths
+            ]
+          end
+
+          def report_errors(error_details, outcome)
+            unreported = error_details.reject { errors.include?(it) }
+            return if unreported.empty?
+
+            reproduction_path = Reproduction.persist(outcome, target_paths)
+
+            unreported.each do |error_detail|
+              errors.add(error_detail)
+              RuboCop::Nightly.logger.error(
+                "[#{reproduction_path}] #{error_detail.cop_name}: #{error_detail.source_pointer}"
+              )
+            end
+          end
+
+          def parse_error_details(stderr)
+            stderr.split("\n").grep(/An error occurred/).uniq.filter_map { parse_error_message(it) }
+          end
+
+          def remaining_time(deadline)
+            return nil unless deadline
+
+            remaining = deadline - monotonic_now
+            raise ExecutionTimeout, 'batch deadline exceeded' unless remaining.positive?
+
+            remaining
+          end
+
+          def monotonic_now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
           def stderr_without_common_issues(stderr)
             stderr.split("\n").grep_v(/has the wrong namespace/).join("\n")
           end
 
           def parse_error_message(error_message)
-            error_message.match(ERROR_MESSAGE_REGEXP).then do |match_data|
-              ErrorDetails.new(cop_name: match_data[:cop_name], source_pointer: match_data[:source_pointer])
+            match_data = error_message.strip.match(ERROR_MESSAGE_REGEXP)
+
+            unless match_data
+              RuboCop::Nightly.logger.debug("Unrecognised RuboCop error line: #{error_message}")
+              return nil
             end
+
+            ErrorDetails.new(cop_name: match_data[:cop_name], source_pointer: match_data[:source_pointer])
           end
         end
       end
