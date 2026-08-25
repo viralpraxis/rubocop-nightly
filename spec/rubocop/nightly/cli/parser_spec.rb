@@ -139,6 +139,20 @@ RSpec.describe RuboCop::Nightly::CLI::Parser do
       end
     end
 
+    describe 'reduction' do
+      it 'is off by default' do
+        expect(parse('fuzzer', '--source', 'rubygems').reduce).to be(false)
+      end
+
+      it 'is enabled by --reduce' do
+        expect(parse('fuzzer', '--source', 'rubygems', '--reduce').reduce).to be(true)
+      end
+
+      it 'is disabled by --no-reduce' do
+        expect(parse('fuzzer', '--source', 'rubygems', '--no-reduce').reduce).to be(false)
+      end
+    end
+
     describe 'compare' do
       it 'requires --from, --to and --source', :aggregate_failures do
         expect { parse('compare') }.to raise_error(RuboCop::Nightly::CLI::UsageError, /--from/)

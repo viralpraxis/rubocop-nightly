@@ -88,8 +88,6 @@ module RuboCop
         private_constant :FUZZER_SWITCHES
 
         class << self
-          # Reads the subcommand from its own argument rather than the global ARGV, and works
-          # on a copy so the caller's array is left intact.
           def parse(arguments)
             arguments = Array(arguments).dup
             command = arguments.shift

@@ -11,8 +11,6 @@ module RuboCop
         @arguments = arguments
       end
 
-      # Returns a process exit status. Nothing used to make this tool exit non-zero, which
-      # made it useless as a CI/nightly job.
       def run
         dispatch(Parser.parse(arguments))
       rescue UsageError => e

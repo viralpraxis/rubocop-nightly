@@ -9,7 +9,6 @@ module RuboCop
         Bundler Gemspec Layout Lint Metrics Migration Naming Security Style
       ].to_set.freeze
 
-      # Grace period between SIGTERM and SIGKILL when a run exceeds its deadline.
       TERMINATION_GRACE_PERIOD = 2
 
       # Everything Bundler exports when it activates, and the sentinel it stores for
@@ -111,8 +110,6 @@ module RuboCop
           removals.merge(bundler_original_environment)
         end
 
-        # Bundler records what it displaced under `BUNDLER_ORIG_*`, using a sentinel for
-        # variables that were unset before it ran.
         def bundler_original_environment
           ENV.keys.grep(/\ABUNDLER_ORIG_/).to_h do |key|
             original = ENV.fetch(key)

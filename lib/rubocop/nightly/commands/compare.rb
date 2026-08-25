@@ -8,8 +8,6 @@ module RuboCop
           @options = options
         end
 
-        # Returns true when the two revisions agree, so the CLI can exit non-zero on a
-        # detected difference.
         def call
           Runner.call(options.source, from: options.from, to: options.to).then { present(it) }
         end
