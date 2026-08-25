@@ -31,7 +31,7 @@ jobs:
     outputs:
       matrix: ${{ steps.sources.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build the shard matrix
         id: sources
@@ -60,7 +60,7 @@ jobs:
     env:
       XDG_DATA_HOME: ${{ github.workspace }}/nightly-data
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -120,7 +120,7 @@ jobs:
 
       - name: Upload artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nightly-${{ matrix.slug }}
           path: artifacts
