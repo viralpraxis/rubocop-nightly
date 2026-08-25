@@ -7,9 +7,7 @@ module RuboCop
     module Commands
       module Fuzzer
         # Everything needed to reproduce a cop crash outside the fuzzer, written somewhere
-        # durable. RuboCop's stdout used to be discarded outright and the configuration lived
-        # in a temporary directory that was removed moments later, so a reported crash left
-        # nothing behind to investigate.
+        # durable rather than into the working directory that is removed after the run.
         class Reproduction
           DIRECTORY = 'fuzzer/reproductions'
 
@@ -124,7 +122,6 @@ module RuboCop
             )
           end
 
-          # `File.write` closes each handle, so every file is complete on disk.
           def contents
             {
               'configuration.yml' => File.read(outcome.configuration_path),

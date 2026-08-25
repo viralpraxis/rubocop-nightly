@@ -116,9 +116,6 @@ module RuboCop
               with_temporary_file(configuration.to_yaml, &)
             end
 
-            # Written through a handle that is flushed, closed and unlinked; the previous
-            # `Tempfile.create.tap { it.write(...) }.path` left the data buffered and the
-            # file on disk forever.
             def with_temporary_file(contents)
               file = Tempfile.create(['rubocop-nightly-compare', '.yml'])
 

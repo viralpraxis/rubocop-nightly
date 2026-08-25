@@ -53,4 +53,39 @@ RSpec.describe RuboCop::Nightly::Commands::Fuzzer::MinimalConfiguration do
   it 'tolerates a cop absent from the variant' do
     expect(described_class.call({}, 'Style/Missing').fetch('Style/Missing')).to eq('Enabled' => true)
   end
+
+  describe 'plugin selection' do
+    let(:plugins) { %w[rubocop-rspec rubocop-rails rubocop-graphql] }
+
+    def config(cop, variant_extras = {})
+      described_class.new({ 'plugins' => plugins, 'AllCops' => {}, cop => { 'Enabled' => true } }
+                           .merge(variant_extras), cop).to_h
+    end
+
+    it 'names no plugin for a core cop' do
+      expect(config('Style/Thing')).not_to have_key('plugins')
+    end
+
+    it 'names only the plugin that owns the cop' do
+      expect(config('RSpec/Thing')['plugins']).to eq(['rubocop-rspec'])
+    end
+
+    it 'matches a department whose gem name uses underscores' do
+      expect(config('GraphQL/Thing')['plugins']).to eq(['rubocop-graphql'])
+    end
+
+    it 'falls back to every plugin when the owner cannot be identified' do
+      expect(config('Unknown/Thing')['plugins']).to eq(plugins)
+    end
+
+    it 'omits the key when the variant declares no plugins' do
+      expect(described_class.new({ 'AllCops' => {}, 'RSpec/Thing' => {} }, 'RSpec/Thing').to_h)
+        .not_to have_key('plugins')
+    end
+
+    it 'tolerates a non-Hash cop entry' do
+      expect(described_class.new({ 'Style/Thing' => 'nonsense' }, 'Style/Thing').to_h['Style/Thing'])
+        .to eq('Enabled' => true)
+    end
+  end
 end

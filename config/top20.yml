@@ -1,0 +1,64 @@
+# Source repositories of the 20 most-downloaded gems on rubygems.org.
+# Gems sharing a repository (aws-sdk-*, rspec-*) are listed once, so the ranking is
+# walked until 20 distinct repositories are collected.
+
+# bundler
+- url: https://github.com/ruby/rubygems.git
+  branch: master
+# aws-sdk-core
+#- url: https://github.com/aws/aws-sdk-ruby.git
+#  branch: version-3
+# jmespath
+- url: https://github.com/jmespath/jmespath.rb.git
+  branch: main
+# i18n
+- url: https://github.com/ruby-i18n/i18n.git
+  branch: master
+# activesupport
+- url: https://github.com/rails/rails.git
+  branch: main
+# rake
+- url: https://github.com/ruby/rake.git
+  branch: master
+# json
+- url: https://github.com/ruby/json.git
+  branch: master
+# concurrent-ruby
+- url: https://github.com/ruby-concurrency/concurrent-ruby.git
+  branch: master
+# rack
+- url: https://github.com/rack/rack.git
+  branch: main
+# tzinfo
+- url: https://github.com/tzinfo/tzinfo.git
+  branch: master
+# minitest
+- url: https://github.com/minitest/minitest.git
+  branch: master
+# nokogiri
+- url: https://github.com/sparklemotion/nokogiri.git
+  branch: main
+# addressable
+- url: https://github.com/sporkmonger/addressable.git
+  branch: main
+# faraday
+- url: https://github.com/lostisland/faraday.git
+  branch: main
+# public_suffix
+- url: https://github.com/weppos/publicsuffix-ruby.git
+  branch: main
+# diff-lcs
+- url: https://github.com/halostatue/diff-lcs.git
+  branch: main
+# rspec-core
+- url: https://github.com/rspec/rspec.git
+  branch: main
+# multi_json
+- url: https://github.com/sferik/multi_json.git
+  branch: main
+# thor
+- url: https://github.com/rails/thor.git
+  branch: main
+# ffi
+- url: https://github.com/ffi/ffi.git
+  branch: master

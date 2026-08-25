@@ -47,7 +47,6 @@ module RuboCop
           _stdout, stderr, status = Open3.capture3(*arguments, '--', git_url, repository_path.to_s)
           return repository_path.to_s if status.success?
 
-          # A failed clone used to leave a path that does not exist to be handed to RuboCop.
           RuboCop::Nightly.logger.error("Failed to clone #{git_url}; skipping. #{stderr.strip}")
           FileUtils.rm_rf(repository_path)
           nil

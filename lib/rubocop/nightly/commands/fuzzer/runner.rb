@@ -11,8 +11,6 @@ module RuboCop
         class Runner < Runner::Base
           ErrorDetails = Fuzzer::ErrorDetails
 
-          # Everything one RuboCop invocation produced. Its stdout used to be discarded
-          # outright, leaving nothing to inspect when a cop crashed.
           Outcome = Data.define(:index, :configuration_path, :stdout, :stderr, :variant)
 
           ERROR_MESSAGE_REGEXP = /

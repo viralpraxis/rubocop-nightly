@@ -68,8 +68,6 @@ module RuboCop
           end
         end
 
-        # Two combinations can share a variant when they never disagree about the same
-        # attribute of the same cop.
         def mergeable?(lhs, rhs)
           (lhs.keys & rhs.keys).all? do |cop_name|
             left = lhs.fetch(cop_name)

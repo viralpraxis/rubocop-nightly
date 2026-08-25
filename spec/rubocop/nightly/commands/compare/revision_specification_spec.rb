@@ -64,6 +64,29 @@ RSpec.describe RuboCop::Nightly::Commands::Compare::RevisionSpecification do
     end
   end
 
+  describe '#describe' do
+    it 'names the revision when there is one' do
+      expect(described_class.parse('abc123').describe).to include('rubocop.git@abc123')
+    end
+
+    it 'says default branch when there is none' do
+      expect(described_class.parse('https://example.com/x.git', repository_only: true).describe)
+        .to include('default branch')
+    end
+  end
+
+  describe 'edge cases' do
+    it 'ignores a trailing colon with an empty revision' do
+      expect(described_class.parse('https://example.com/x.git:', repository_only: true).revision).to be_nil
+    end
+
+    it 'does not split when the text after the colon contains a slash' do
+      spec = described_class.parse('https://example.com/x.git:refs/heads/main', repository_only: true)
+
+      expect(spec.revision).to be_nil
+    end
+  end
+
   describe '#relative_path' do
     def path_for(url) = described_class.parse(url, repository_only: true).relative_path
 

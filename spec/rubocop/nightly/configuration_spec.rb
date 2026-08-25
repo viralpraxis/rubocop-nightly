@@ -111,6 +111,40 @@ RSpec.describe RuboCop::Nightly::Configuration do
     end
   end
 
+  describe 'building from the rubocop executable' do
+    def stub_show_cops(stdout, exitstatus: 0, stderr: '')
+      status = instance_double(Process::Status, success?: exitstatus.zero?, exitstatus: exitstatus)
+      allow(RuboCop::Nightly::Runtime).to receive(:execute).and_return([stdout, stderr, status])
+    end
+
+    it 'raises when the executable fails' do
+      stub_show_cops('', exitstatus: 1, stderr: 'cannot load such file')
+
+      expect { described_class.build }
+        .to raise_error(RuboCop::Nightly::ExecutionError, /cannot load such file/)
+    end
+
+    it 'raises when the dump is empty' do
+      stub_show_cops('')
+
+      expect { described_class.build }.to raise_error(RuboCop::Nightly::ExecutionError, /no parseable/)
+    end
+
+    it 'parses a dump into a configuration' do
+      stub_show_cops("Style/Thing:\n  Enabled: false\n")
+
+      expect(described_class.build.cop_names).to eq(['Style/Thing'])
+    end
+
+    it 'requires plugins unless they are being removed' do
+      stub_show_cops("Style/Thing:\n  Enabled: true\n")
+
+      described_class.build(remove_plugins: true)
+
+      expect(RuboCop::Nightly::Runtime).to have_received(:execute).with('--show-cops', require_plugins: false)
+    end
+  end
+
   describe '#cop_names' do
     it 'recognises consecutive capitals after the slash' do
       names = build(raw.merge('Gemspec/RequireMFA' => { 'Enabled' => true })).cop_names
@@ -147,6 +181,62 @@ RSpec.describe RuboCop::Nightly::Configuration do
     it 'pairs SupportedStylesAlignWith with EnforcedStyleAlignWith' do
       expect(parameters.fetch('Layout/EndAlignment'))
         .to eq('SupportedStylesAlignWith' => 'EnforcedStyleAlignWith')
+    end
+  end
+
+  describe 'plugins and departments' do
+    it 'omits the plugins key when plugins are removed' do
+      expect(YAML.safe_load(build(raw, remove_plugins: true).to_yaml)).not_to have_key('plugins')
+    end
+
+    it 'drops a require key when plugins are removed' do
+      configuration = build(raw.merge('require' => ['x']), remove_plugins: true)
+
+      expect(YAML.safe_load(configuration.to_yaml)).not_to have_key('require')
+    end
+
+    it 'force-enables every cop when asked' do
+      disabled = raw.merge('Style/Disabled' => { 'Enabled' => false })
+      enabled = YAML.safe_load(build(disabled, enable_all_cops: true).to_yaml)
+
+      expect(enabled.dig('Style/Disabled', 'Enabled')).to be(true)
+    end
+
+    it 'strips Include and Exclude from cop entries' do
+      configuration = build(raw.merge('Style/Thing' => { 'Enabled' => true, 'Include' => ['a'], 'Exclude' => ['b'] }))
+      entry = YAML.safe_load(configuration.to_yaml).fetch('Style/Thing')
+
+      expect(entry.keys).not_to include('Include', 'Exclude')
+    end
+
+    it 'keeps an AllCops section supplied by the caller' do
+      configuration = build(raw.merge('AllCops' => { 'Exclude' => ['vendor/**/*'] }))
+
+      expect(YAML.safe_load(configuration.to_yaml).dig('AllCops', 'Exclude')).to eq(['vendor/**/*'])
+    end
+
+    it 'tolerates a non-Hash AllCops' do
+      expect { build(raw.merge('AllCops' => 'nonsense')) }.not_to raise_error
+    end
+  end
+
+  describe '#style_parameters with no Enforced partner' do
+    it 'ignores a Supported key that names no style axis' do
+      configuration = build(raw.merge('Style/Yoda' => { 'Enabled' => true, 'SupportedOperators' => %w[< >] }))
+
+      expect(configuration.style_parameters.fetch('Style/Yoda')).to be_empty
+    end
+
+    it 'assumes EnforcedStyle for a bare SupportedStyles' do
+      configuration = build(raw.merge('Style/Bare' => { 'Enabled' => true, 'SupportedStyles' => %w[a b] }))
+
+      expect(configuration.style_parameters.fetch('Style/Bare')).to eq('SupportedStyles' => 'EnforcedStyle')
+    end
+
+    it 'returns no parameters for a non-Hash cop entry' do
+      configuration = build(raw.merge('Style/Weird' => 'nonsense'))
+
+      expect(configuration.style_parameters.fetch('Style/Weird')).to eq({})
     end
   end
 

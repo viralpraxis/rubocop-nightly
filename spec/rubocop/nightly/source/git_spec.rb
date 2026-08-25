@@ -15,6 +15,49 @@ RSpec.describe RuboCop::Nightly::Source::Git do
     end
   end
 
+  describe 'updating an existing checkout' do
+    let(:root) { Pathname(Dir.mktmpdir('rubocop-nightly-git')) }
+    let(:source) { described_class.new(sources: [{ 'url' => 'https://example.com/x.git', 'branch' => branch }]) }
+    let(:branch) { 'main' }
+
+    before do
+      stub_const("#{described_class}::DATA_DIRECTORY", root) if described_class.const_defined?(:DATA_DIRECTORY)
+    end
+
+    after { FileUtils.remove_entry(root) if root.exist? }
+
+    it 'fast-forwards instead of cloning when the checkout exists' do
+      checkout = root.join('example.com_x')
+      FileUtils.mkdir_p(checkout.join('.git'))
+      allow(source).to receive(:system).and_return(true)
+
+      expect(source.fetch).to eq([checkout.to_s])
+    end
+
+    it 'warns and keeps the checkout when the fetch fails' do
+      checkout = root.join('example.com_x')
+      FileUtils.mkdir_p(checkout.join('.git'))
+      allow(source).to receive(:system).and_return(false)
+      allow(RuboCop::Nightly.logger).to receive(:warn)
+
+      source.fetch
+
+      expect(RuboCop::Nightly.logger).to have_received(:warn).with(/Failed to update/)
+    end
+
+    context 'without a branch' do
+      let(:branch) { nil }
+
+      it 'fetches the default branch' do
+        checkout = root.join('example.com_x')
+        FileUtils.mkdir_p(checkout.join('.git'))
+        allow(source).to receive(:system).and_return(true)
+
+        expect(source.fetch).to eq([checkout.to_s])
+      end
+    end
+  end
+
   describe 'directory naming' do
     def name_for(url) = described_class.new(sources: []).send(:directory_name_for, url)
 
