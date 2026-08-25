@@ -24,8 +24,10 @@ RSpec.describe RuboCop::Nightly::Runtime do
       expect { described_class.execute('--version', bundle_gemfile: Pathname('/somewhere/Gemfile')) }
         .to raise_error(RuboCop::Nightly::ExecutableNotFound)
 
-      expect(Open3).to have_received(:popen3)
-        .with({ 'BUNDLE_GEMFILE' => '/somewhere/Gemfile' }, 'bundle', 'exec', 'rubocop', '--version', pgroup: true)
+      expect(Open3).to have_received(:popen3).with(
+        hash_including('BUNDLE_GEMFILE' => '/somewhere/Gemfile'),
+        'bundle', 'exec', 'rubocop', '--version', pgroup: true
+      )
     end
 
     context 'with argument `require_plugins` set to `true`', :aggregate_failures do
@@ -67,6 +69,40 @@ RSpec.describe RuboCop::Nightly::Runtime do
 
         sleep 0.2
         expect(`ps -eo args`.lines.count { it.include?(marker) }).to eq(0)
+      end
+    end
+
+    # Launching via `bundle exec` used to leak the parent's bundle into the child, which then
+    # booted against the wrong Gemfile and died with "the git source is not yet checked out".
+    context 'when running inside an activated Bundler environment' do
+      around do |example|
+        with_environment_variable('BUNDLE_LOCKFILE', '/parent/Gemfile.lock') do
+          with_environment_variable('BUNDLER_ORIG_RUBYOPT', '-W0', &example)
+        end
+      end
+
+      it 'clears the parent bundle out of the child environment', :aggregate_failures do
+        allow(Open3).to receive(:popen3).and_raise(Errno::ENOENT, 'bundle')
+
+        expect { described_class.execute('--version', bundle_gemfile: Pathname('/child/Gemfile')) }
+          .to raise_error(RuboCop::Nightly::ExecutableNotFound)
+
+        environment = nil
+        expect(Open3).to have_received(:popen3) { |env, *| environment = env }
+
+        expect(environment).to include('BUNDLE_LOCKFILE' => nil)
+        expect(environment).to include('BUNDLE_GEMFILE' => '/child/Gemfile')
+        expect(environment).to include('RUBYOPT' => '-W0')
+      end
+
+      it 'deletes rather than blanks the displaced variables', :aggregate_failures do
+        allow(Open3).to receive(:popen3).and_raise(Errno::ENOENT, 'bundle')
+
+        with_environment_variable('BUNDLER_ORIG_RUBYLIB', 'BUNDLER_ENVIRONMENT_PRESERVER_INTENTIONALLY_NIL') do
+          expect { described_class.execute('--version') }.to raise_error(RuboCop::Nightly::ExecutableNotFound)
+        end
+
+        expect(Open3).to have_received(:popen3) { |env, *| expect(env['RUBYLIB']).to be_nil }
       end
     end
 

@@ -1,0 +1,39 @@
+version: 2
+
+updates:
+  - package-ecosystem: bundler
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:00'
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ruby
+    groups:
+      # RuboCop and its extensions move together; one PR per week beats a dozen.
+      rubocop:
+        patterns:
+          - rubocop
+          - rubocop-*
+      development:
+        patterns:
+          - rspec*
+          - simplecov
+          - rake
+          - ruby-lsp
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:00'
+    labels:
+      - dependencies
+      - github-actions
+    groups:
+      actions:
+        patterns:
+          - '*'

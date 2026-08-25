@@ -12,6 +12,13 @@ module RuboCop
       # Grace period between SIGTERM and SIGKILL when a run exceeds its deadline.
       TERMINATION_GRACE_PERIOD = 2
 
+      # Everything Bundler exports when it activates, and the sentinel it stores for
+      # variables that were unset before it ran.
+      BUNDLER_ENVIRONMENT_PATTERN = /\A(?:BUNDLE_|BUNDLER_)/
+      BUNDLER_UNSET = 'BUNDLER_ENVIRONMENT_PRESERVER_INTENTIONALLY_NIL'
+
+      private_constant :BUNDLER_ENVIRONMENT_PATTERN, :BUNDLER_UNSET
+
       class << self
         # Runs `bundle exec rubocop` and captures its output.
         #
@@ -26,7 +33,7 @@ module RuboCop
           timeout: nil
         )
           capture(
-            { 'BUNDLE_GEMFILE' => bundle_gemfile.to_s },
+            unbundled_environment.merge('BUNDLE_GEMFILE' => bundle_gemfile.to_s),
             'bundle', 'exec', 'rubocop',
             *(plugin_requires_directive if require_plugins),
             *command,
@@ -83,13 +90,35 @@ module RuboCop
 
         def probe_target_ruby_versions(bundle_gemfile)
           stdout, _stderr, status = Open3.capture3(
-            { 'BUNDLE_GEMFILE' => bundle_gemfile.to_s }, 'bundle', 'exec', 'ruby', '-e', PROBE
+            unbundled_environment.merge('BUNDLE_GEMFILE' => bundle_gemfile.to_s),
+            'bundle', 'exec', 'ruby', '-e', PROBE
           )
           return [] unless status.success?
 
           stdout.split(',').filter_map { Float(it, exception: false) }
         rescue SystemCallError
           []
+        end
+
+        # Restores the environment as it stood before Bundler activated, mirroring
+        # `Bundler.with_unbundled_env`. The child is deliberately pointed at a *different*
+        # Gemfile, so anything the parent's Bundler exported makes it boot against the wrong
+        # bundle and die with "the git source ... is not yet checked out". Every `BUNDLE_*`
+        # matters, not just the obvious ones — `BUNDLE_LOCKFILE` alone is enough to break it.
+        def unbundled_environment
+          removals = ENV.keys.grep(BUNDLER_ENVIRONMENT_PATTERN).to_h { [it, nil] }
+
+          removals.merge(bundler_original_environment)
+        end
+
+        # Bundler records what it displaced under `BUNDLER_ORIG_*`, using a sentinel for
+        # variables that were unset before it ran.
+        def bundler_original_environment
+          ENV.keys.grep(/\ABUNDLER_ORIG_/).to_h do |key|
+            original = ENV.fetch(key)
+
+            [key.delete_prefix('BUNDLER_ORIG_'), (original unless original == BUNDLER_UNSET)]
+          end
         end
 
         def capture(environment, *arguments, timeout:)
