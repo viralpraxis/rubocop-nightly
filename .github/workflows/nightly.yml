@@ -33,6 +33,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0'
+
       - name: Build the shard matrix
         id: sources
         env:
@@ -45,7 +50,7 @@ jobs:
               slug = url.sub(%r{\A[a-z]+://}, "").sub(/\.git\z/, "").gsub(%r{[^\w.-]+}, "-")
               { "url" => url, "branch" => source["branch"], "slug" => slug }
             end
-            File.open(ENV.fetch("GITHUB_OUTPUT"), "a") { it.puts "matrix=#{JSON.generate({ "include" => include })}" }
+            File.open(ENV.fetch("GITHUB_OUTPUT"), "a") { |out| out.puts "matrix=#{JSON.generate({ "include" => include })}" }
           '
 
   fuzz:
