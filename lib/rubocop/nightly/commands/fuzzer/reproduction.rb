@@ -18,12 +18,12 @@ module RuboCop
           # Every crash gets its own directory, keyed by cop and by the exact location it was
           # reported at, so several crashes in one variant can never overwrite one another's
           # report — `RSpec/SpecFilePathFormat` alone hit seven different files in one batch.
-          def self.write_mre(crash, variant, directory, reduce: false)
+          def self.write_mre(crash, variant, directory, reduce: false, autocorrect: false)
             target = directory.join('mre', slug(crash))
             FileUtils.mkdir_p(target)
 
-            result = (reduce_crash(crash, variant) if reduce)
-            result ? write_reduced(target, result) : write_whole_file(target, crash, variant)
+            result = (reduce_crash(crash, variant, autocorrect) if reduce)
+            result ? write_reduced(target, result) : write_whole_file(target, crash, variant, autocorrect:)
           rescue StandardError => e
             RuboCop::Nightly.logger.warn("Could not write MRE for #{crash.cop_name}: #{e.class}: #{e.message}")
           end
@@ -34,8 +34,8 @@ module RuboCop
 
           # Reduction is best-effort and must never take down the run; a nil result simply
           # means the whole-file example is written instead.
-          def self.reduce_crash(crash, variant)
-            Reduction.call(crash, variant)
+          def self.reduce_crash(crash, variant, autocorrect)
+            Reduction.call(crash, variant, autocorrect: autocorrect)
           rescue StandardError => e
             RuboCop::Nightly.logger.warn("Reduction failed for #{crash.cop_name}: #{e.class}: #{e.message}")
             nil
@@ -57,25 +57,35 @@ module RuboCop
           # Not minimal, but it always reproduces. The file is referenced rather than inlined:
           # an unreduced corpus file can be thousands of lines, and embedding it would make the
           # script unreadable for no benefit.
-          def self.write_whole_file(target, crash, variant)
+          def self.write_whole_file(target, crash, variant, autocorrect: false)
             return RuboCop::Nightly.logger.warn("No source file for #{crash.cop_name}") unless readable?(crash)
 
             configuration = MinimalConfiguration.new(variant, crash.cop_name)
             File.write(target.join('mre.yml'), configuration.to_yaml)
-            write_script(target, whole_file_command(crash, configuration))
+            write_script(target, whole_file_command(crash, configuration, autocorrect: autocorrect))
 
             RuboCop::Nightly.logger.info("Wrote whole-file MRE for #{crash.cop_name} -> #{target.join('mre.sh')}")
           end
 
           def self.readable?(crash) = crash.path && File.file?(crash.path)
 
-          def self.whole_file_command(crash, configuration)
+          # The correcting form is piped in over stdin rather than pointed at the file. RuboCop
+          # rewrites whatever `--autocorrect` is aimed at, and the file named here is a corpus
+          # checkout that later runs depend on — running the reproduction must not corrupt it.
+          def self.whole_file_command(crash, configuration, autocorrect: false)
             [
               "# #{crash.cop_name} at #{crash.source_pointer}",
-              "bundle exec rubocop --cache false --only #{crash.cop_name} --config <(cat <<'YAML'",
+              "#{invocation_for(crash, autocorrect)} --cache false --only #{crash.cop_name} " \
+              "--config <(cat <<'YAML'",
               configuration.to_yaml.delete_prefix("---\n").chomp,
-              'YAML', ") #{crash.path}", ''
+              'YAML', ") #{'< ' if autocorrect}#{crash.path}", ''
             ].join("\n")
+          end
+
+          def self.invocation_for(crash, autocorrect)
+            return 'bundle exec rubocop' unless autocorrect
+
+            "bundle exec rubocop --stdin #{File.basename(crash.path)} --autocorrect-all"
           end
 
           # The self-contained form, used once the source has been reduced to a few lines.

@@ -6,17 +6,21 @@ module RuboCop
       # Batches are counted in files, not source entries. A whole 50-gem corpus in one batch
       # meant a single timeout lost every result; at 1000 files the RuboCop start-up cost
       # (~0.5s against ~0.05s per file) stays around 1% while the blast radius drops ~17x.
-      DEFAULT_OPTIONS = { batch_size: 1000, batch_timeout: nil, log_level: 'INFO', reduce: false }.freeze
+      DEFAULT_OPTIONS = {
+        batch_size: 1000, batch_timeout: nil, log_level: 'INFO', reduce: false, autocorrect: false
+      }.freeze
       LOG_LEVELS = %w[DEBUG INFO WARN ERROR FATAL UNKNOWN].freeze
 
-      Result = Data.define(:errors, :failed_batches) do
-        def success? = errors.empty? && failed_batches.zero?
+      Result = Data.define(:findings, :failed_batches) do
+        def success? = findings.empty? && failed_batches.zero?
+
+        def errors = findings.cop_errors
       end
 
       def initialize(source, options = {})
         @source = source
         @options = DEFAULT_OPTIONS.merge(options.compact)
-        @errors = Set.new
+        @findings = RuboCop::Nightly::Commands::Fuzzer::Findings.new
         @failed_batches = 0
       end
 
@@ -26,7 +30,7 @@ module RuboCop
         base_paths = Corpus.new(source.fetch).files
         process_batches(base_paths) unless nothing_to_do?(base_paths)
 
-        Result.new(errors: @errors, failed_batches: @failed_batches)
+        Result.new(findings: @findings, failed_batches: @failed_batches)
       end
 
       private
@@ -53,14 +57,19 @@ module RuboCop
       # One bad batch must not take down a whole nightly run, but it must still be visible
       # in the exit status.
       def process(batch, index)
-        RuboCop::Nightly::Commands::Fuzzer::Runner
-          .new(batch, configuration:, timeout: batch_timeout, errors: @errors, reduce: options.fetch(:reduce))
-          .run
+        RuboCop::Nightly::Commands::Fuzzer::Runner.new(batch, **runner_options).run
       rescue ExecutionTimeout
         @failed_batches += 1
         RuboCop::Nightly.logger.warn "Processing group #{index.succ} took more than #{batch_timeout}s, aborting"
       rescue StandardError => e
         record_failure(index, e)
+      end
+
+      def runner_options
+        {
+          configuration:, timeout: batch_timeout, findings: @findings,
+          reduce: options.fetch(:reduce), autocorrect: options.fetch(:autocorrect)
+        }
       end
 
       def record_failure(index, error)

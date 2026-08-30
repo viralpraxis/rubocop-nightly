@@ -6,6 +6,53 @@ RSpec.describe RuboCop::Nightly::Runtime do
       YAML.load(data, permitted_classes: [Regexp, Symbol])
     end
 
+    it 'still registers plugin cops when the default configuration is forced' do
+      project_gemfile = Pathname(__dir__).join('../../../Gemfile').expand_path
+      stdout, = described_class.execute(
+        '--show-cops', '--force-default-config', '--plugin', 'rubocop-rspec', bundle_gemfile: project_gemfile
+      )
+
+      expect(parsed_configuration(stdout).keys).to include(a_string_starting_with('RSpec/'))
+    end
+
+    context 'when an ancestor directory holds a .rubocop.yml' do
+      let(:root) { Pathname(Dir.mktmpdir('rubocop-nightly-ancestor')) }
+      let(:working_directory) { root.join('work') }
+      let(:project_gemfile) { Pathname(__dir__).join('../../../Gemfile').expand_path }
+
+      before do
+        working_directory.mkpath
+        root.join('.rubocop.yml').write("plugins:\n  - rubocop-absent-from-this-bundle\n")
+      end
+
+      after { FileUtils.remove_entry(root) }
+
+      def show_cops(*extra_arguments)
+        Dir.chdir(working_directory) do
+          described_class.execute('--show-cops', *extra_arguments, bundle_gemfile: project_gemfile)
+        end
+      end
+
+      it 'aborts without the flag, because RuboCop merges configuration from above the CWD', :aggregate_failures do
+        _stdout, stderr, status = show_cops
+
+        expect(status).not_to be_success
+        expect(stderr).to include('cannot load such file -- rubocop-absent-from-this-bundle')
+      end
+
+      it 'succeeds with --force-default-config' do
+        _stdout, _stderr, status = show_cops('--force-default-config')
+
+        expect(status).to be_success
+      end
+
+      it 'reports RuboCop own defaults rather than the ancestor configuration' do
+        stdout, = show_cops('--force-default-config')
+
+        expect(parsed_configuration(stdout).keys).to include('Style/Documentation')
+      end
+    end
+
     it 'performs commands and returns expected result', :aggregate_failures do
       stdout, stderr, status = described_class.execute(
         '--show-cops',
@@ -16,6 +63,62 @@ RSpec.describe RuboCop::Nightly::Runtime do
       expect(status).to be_success
 
       expect(parsed_configuration(stdout).keys).to include('Bundler/DuplicatedGem')
+    end
+
+    describe 'the `warnings` argument' do
+      def captured_environment(...)
+        allow(Open3).to receive(:popen3).and_raise(Errno::ENOENT, 'bundle')
+
+        expect { described_class.execute('--version', ...) }.to raise_error(RuboCop::Nightly::ExecutableNotFound)
+
+        expect(Open3).to have_received(:popen3) { |environment, *| return environment }
+      end
+
+      # What the child inherits is whatever stood before Bundler activated, so these examples
+      # pin that rather than assuming the suite itself was started without `RUBYOPT`.
+      def with_pristine_rubyopt(&)
+        with_environment_variable('RUBYOPT', nil) do
+          with_environment_variable('BUNDLER_ORIG_RUBYOPT', 'BUNDLER_ENVIRONMENT_PRESERVER_INTENTIONALLY_NIL', &)
+        end
+      end
+
+      # `nil` rather than absent: `unbundled_environment` is restoring the RUBYOPT that stood
+      # before Bundler activated, and under Bundler that was nothing at all.
+      it 'leaves RUBYOPT alone by default' do
+        with_pristine_rubyopt do
+          expect(captured_environment).to include('RUBYOPT' => nil)
+        end
+      end
+
+      it 'asks the child for Ruby verbose mode when it is set' do
+        with_pristine_rubyopt do
+          expect(captured_environment(warnings: true)).to include('RUBYOPT' => '-W')
+        end
+      end
+
+      it 'appends to the RUBYOPT the child would otherwise have been given' do
+        with_environment_variable('BUNDLER_ORIG_RUBYOPT', '--yjit') do
+          expect(captured_environment(warnings: true)).to include('RUBYOPT' => '--yjit -W')
+        end
+      end
+
+      # The point of the flag: RuboCop's own load is warning-free, so a warning that reaches
+      # stderr came out of the code under test.
+      it 'actually reaches the RuboCop process' do
+        _stdout, stderr, _status = described_class.execute(
+          '--version', '-r', fixture_path('warning.rb'), warnings: true
+        )
+
+        expect(stderr).to include('warning: possibly useless use of == in void context')
+      end
+
+      it 'stays quiet without the flag' do
+        stderr = with_pristine_rubyopt do
+          described_class.execute('--version', '-r', fixture_path('warning.rb'))[1]
+        end
+
+        expect(stderr).not_to include('warning: possibly useless use')
+      end
     end
 
     it 'passes the requested Gemfile through to the child environment', :aggregate_failures do

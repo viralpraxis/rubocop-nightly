@@ -141,7 +141,8 @@ RSpec.describe RuboCop::Nightly::Configuration do
 
       described_class.build(remove_plugins: true)
 
-      expect(RuboCop::Nightly::Runtime).to have_received(:execute).with('--show-cops', require_plugins: false)
+      expect(RuboCop::Nightly::Runtime).to have_received(:execute)
+        .with('--show-cops', '--force-default-config', require_plugins: false)
     end
   end
 

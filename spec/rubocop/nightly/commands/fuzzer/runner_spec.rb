@@ -53,7 +53,7 @@ RSpec.describe RuboCop::Nightly::Commands::Fuzzer::Runner do
           '--parallel',
           '-r', File.expand_path('../../../../../lib/rubocop/nightly/null_formatter.rb', __dir__),
           '/a.rb',
-          require_plugins: true, timeout: nil
+          require_plugins: true, timeout: nil, warnings: true
         )
       end
 
@@ -112,7 +112,7 @@ RSpec.describe RuboCop::Nightly::Commands::Fuzzer::Runner do
       end
 
       it 'reports the offending cop and source pointer' do
-        expect(runner.run).to contain_exactly(
+        expect(runner.run.cop_errors).to contain_exactly(
           described_class::ErrorDetails.new(
             cop_name: 'Style/MethodCallWithoutArgsParentheses',
             source_pointer: 'bug.rb:1:15'
@@ -152,11 +152,11 @@ RSpec.describe RuboCop::Nightly::Commands::Fuzzer::Runner do
       end
 
       it 'does not re-report an error already seen in an earlier batch' do
-        errors = Set.new
-        described_class.new(['/a.rb'], configuration: configuration, errors: errors).run
+        findings = RuboCop::Nightly::Commands::Fuzzer::Findings.new
+        described_class.new(['/a.rb'], configuration: configuration, findings: findings).run
 
-        expect { described_class.new(['/b.rb'], configuration: configuration, errors: errors).run }
-          .not_to change(errors, :size)
+        expect { described_class.new(['/b.rb'], configuration: configuration, findings: findings).run }
+          .not_to change(findings.cop_errors, :size)
       end
     end
 
@@ -193,6 +193,116 @@ RSpec.describe RuboCop::Nightly::Commands::Fuzzer::Runner do
         expect { described_class.new(['/a.rb'], configuration: configuration, timeout: 0.06).run }
           .to raise_error(RuboCop::Nightly::ExecutionTimeout)
       end
+    end
+  end
+
+  describe 'Ruby warnings' do
+    let(:configuration) do
+      RuboCop::Nightly::Configuration.build({ 'Department/CopName1' => { 'Enabled' => true } })
+    end
+
+    def run_with_stderr(stderr)
+      allow(RuboCop::Nightly::Runtime).to receive(:execute).and_return(
+        ['', stderr, instance_double(Process::Status, success?: true, exitstatus: 0)]
+      )
+
+      described_class.new(['/a.rb'], configuration: configuration).run
+    end
+
+    it 'asks the child for verbose mode' do
+      described_class.new(['/a.rb'], configuration: configuration).run
+
+      expect(RuboCop::Nightly::Runtime).to have_received(:execute).with(any_args, hash_including(warnings: true))
+    end
+
+    it 'collects a warning RuboCop emitted while inspecting' do
+      findings = run_with_stderr("/gems/rubocop/lib/rubocop/cop/style/x.rb:12: warning: method redefined\n")
+
+      expect(findings.warnings.map(&:message)).to contain_exactly('method redefined')
+    end
+
+    it 'masks the Bundler checkout revision so one warning is not counted twice' do
+      findings = run_with_stderr(
+        "/gems/rubocop-389a084d5225/lib/x.rb:1: warning: boom\n" \
+        "/gems/rubocop-4555c49f3163/lib/x.rb:9: warning: boom\n"
+      )
+
+      expect(findings.warnings.size).to eq(1)
+    end
+
+    # A warning is worth reading, but a noisy dependency must not turn an otherwise clean
+    # night red.
+    it 'does not treat a warning as a defect' do
+      findings = run_with_stderr("/gems/rubocop/lib/x.rb:12: warning: method redefined\n")
+
+      expect(findings).to be_empty
+    end
+
+    it 'ignores lines that are not warnings' do
+      findings = run_with_stderr("Inspecting 1 file\nwarning-ish but not a warning\n")
+
+      expect(findings.warnings).to be_empty
+    end
+  end
+
+  describe 'autocorrect mode' do
+    let(:configuration) do
+      RuboCop::Nightly::Configuration.build({ 'Department/CopName1' => { 'Enabled' => true } })
+    end
+
+    it 'does not ask RuboCop to correct anything by default' do
+      described_class.new(['/a.rb'], configuration: configuration).run
+
+      expect(executed_arguments).not_to include('--autocorrect-all')
+    end
+
+    it 'asks RuboCop to correct when it is on' do
+      described_class.new(['/a.rb'], configuration: configuration, autocorrect: true).run
+
+      expect(executed_arguments).to include('--autocorrect-all')
+    end
+
+    # The corpus is a set of git checkouts every later run depends on, so a correcting run is
+    # pointed at copies instead.
+    it 'points RuboCop at something other than the corpus path' do
+      corpus = Pathname(Dir.mktmpdir('rubocop-nightly-corpus'))
+      corpus.join('a.rb').write("x = 1\n")
+
+      described_class.new([corpus.join('a.rb').to_s], configuration: configuration, autocorrect: true).run
+
+      expect(executed_arguments).not_to include(corpus.join('a.rb').to_s)
+    ensure
+      FileUtils.remove_entry(corpus)
+    end
+
+    it 'reports an infinite correction loop, which never reaches the cop-error path' do
+      allow(RuboCop::Nightly::Runtime).to receive(:execute).and_return(
+        ['', "Infinite loop detected in /a.rb and caused by Style/A -> Style/B\n",
+         instance_double(Process::Status, success?: true, exitstatus: 0)]
+      )
+
+      findings = described_class.new(['/a.rb'], configuration: configuration).run
+
+      expect(findings.correction_loops.map(&:cop_names)).to contain_exactly('Style/A -> Style/B')
+    end
+
+    it 'counts a correction loop as a defect' do
+      allow(RuboCop::Nightly::Runtime).to receive(:execute).and_return(
+        ['', "Infinite loop detected in /a.rb and caused by Style/A\n",
+         instance_double(Process::Status, success?: true, exitstatus: 0)]
+      )
+
+      expect(described_class.new(['/a.rb'], configuration: configuration).run).not_to be_empty
+    end
+
+    it 'tolerates a loop message with no path or cause' do
+      allow(RuboCop::Nightly::Runtime).to receive(:execute).and_return(
+        ['', "Infinite loop detected\n", instance_double(Process::Status, success?: true, exitstatus: 0)]
+      )
+
+      findings = described_class.new(['/a.rb'], configuration: configuration).run
+
+      expect(findings.correction_loops.size).to eq(1)
     end
   end
 

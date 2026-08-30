@@ -118,10 +118,40 @@ All sources support the following CLI options:
    seconds), but a large input can take considerably longer, so it is opt-in. Use `--no-reduce`
    to be explicit.
 
+- `--autocorrect` (default: off)
+
+   Also exercise RuboCop's correction path, which is roughly half of a cop's code and is never
+   reached by a read-only run. Three things are reported that a read-only run cannot see:
+
+   - a cop that raises while correcting rather than while inspecting;
+   - an *infinite correction loop*, which RuboCop warns about on stderr and steps over, so it
+     never reaches the "an error occurred" path;
+   - a **broken correction** — source that parsed before the correction and does not parse
+     after it. This one needs no judgement: it is always a bug.
+
+   **The corpus is never modified.** `--autocorrect` rewrites whatever it is pointed at, so each
+   batch is copied into a throwaway directory first and RuboCop is pointed at the copies. Each
+   copy keeps its original absolute path underneath the temporary root, so path-sensitive cops
+   such as `Naming/FileName` and `RSpec/SpecFilePathFormat` still behave the same way. The
+   directory is removed when the batch ends.
+
+   Use `--no-autocorrect` to be explicit.
+
 - `--log-level` (default: `INFO`)
 
    One of `DEBUG`, `INFO`, `WARN`, `ERROR`, `FATAL`, `UNKNOWN`. Logs go to stderr, so the
    `compare` report on stdout stays machine-readable.
+
+### Ruby warnings
+
+The RuboCop child is run under Ruby's verbose mode (`RUBYOPT=-W`), and any warning it emits is
+collected and reported. RuboCop's own load is warning-free, so a warning that appears during a run
+came out of the code under test — an uninitialised variable, a redefined method, a deprecated
+call. Warnings are deduplicated across the run (with the Bundler checkout revision masked out of
+the path, so one warning from two checkouts of a gem is not counted twice).
+
+They are reported but do **not** affect the exit status: they are worth reading, but a single
+noisy dependency should not be able to turn an otherwise clean night red.
 
 ### Exit status
 

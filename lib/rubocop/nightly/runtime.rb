@@ -11,12 +11,49 @@ module RuboCop
 
       TERMINATION_GRACE_PERIOD = 2
 
+      # Ruby's verbose mode. RuboCop's own load is warning-free, so anything this surfaces during
+      # an inspection came out of the code under test rather than out of the harness.
+      RUBY_WARNINGS_FLAG = '-W'
+
       # Everything Bundler exports when it activates, and the sentinel it stores for
       # variables that were unset before it ran.
       BUNDLER_ENVIRONMENT_PATTERN = /\A(?:BUNDLE_|BUNDLER_)/
       BUNDLER_UNSET = 'BUNDLER_ENVIRONMENT_PRESERVER_INTENTIONALLY_NIL'
 
       private_constant :BUNDLER_ENVIRONMENT_PATTERN, :BUNDLER_UNSET
+
+      # Builds the environment a child process is handed.
+      module ChildEnvironment
+        module_function
+
+        # Restores the environment as it stood before Bundler activated, mirroring
+        # `Bundler.with_unbundled_env`. The child is deliberately pointed at a *different*
+        # Gemfile, so anything the parent's Bundler exported makes it boot against the wrong
+        # bundle and die with "the git source ... is not yet checked out". Every `BUNDLE_*`
+        # matters, not just the obvious ones — `BUNDLE_LOCKFILE` alone is enough to break it.
+        def unbundled
+          removals = ENV.keys.grep(BUNDLER_ENVIRONMENT_PATTERN).to_h { [it, nil] }
+
+          removals.merge(bundler_original)
+        end
+
+        # Appended rather than assigned: `unbundled` may already be restoring the `RUBYOPT` that
+        # stood before Bundler activated, and dropping it would change how the child boots.
+        # `bundle exec` re-adds its own `-rbundler/setup` regardless.
+        def with_ruby_warnings(environment)
+          inherited = environment.fetch('RUBYOPT') { ENV.fetch('RUBYOPT', nil) }
+
+          environment.merge('RUBYOPT' => [inherited, RUBY_WARNINGS_FLAG].compact.join(' ').strip)
+        end
+
+        def bundler_original
+          ENV.keys.grep(/\ABUNDLER_ORIG_/).to_h do |key|
+            original = ENV.fetch(key)
+
+            [key.delete_prefix('BUNDLER_ORIG_'), (original unless original == BUNDLER_UNSET)]
+          end
+        end
+      end
 
       class << self
         # Runs `bundle exec rubocop` and captures its output.
@@ -25,14 +62,20 @@ module RuboCop
         # signalled (RuboCop's `--parallel` workers are children of the child) and
         # `ExecutionTimeout` is raised. Unlike wrapping `Open3.capture3` in `Timeout.timeout`,
         # this actually stops the work rather than waiting for it to finish anyway.
+        # `warnings` turns on Ruby's own verbose mode in the child. It is off by default because
+        # it is only wanted where something reads the warnings back: `compare` logs the whole of
+        # stderr, and `--show-cops` treats it as failure detail.
         def execute(
           *command,
           require_plugins: false,
           bundle_gemfile: Pathname(Dir.pwd).join('Gemfile'),
-          timeout: nil
+          timeout: nil,
+          warnings: false
         )
+          environment = unbundled_environment.merge('BUNDLE_GEMFILE' => bundle_gemfile.to_s)
+
           capture(
-            unbundled_environment.merge('BUNDLE_GEMFILE' => bundle_gemfile.to_s),
+            warnings ? with_ruby_warnings(environment) : environment,
             'bundle', 'exec', 'rubocop',
             *(plugin_requires_directive if require_plugins),
             *command,
@@ -99,24 +142,9 @@ module RuboCop
           []
         end
 
-        # Restores the environment as it stood before Bundler activated, mirroring
-        # `Bundler.with_unbundled_env`. The child is deliberately pointed at a *different*
-        # Gemfile, so anything the parent's Bundler exported makes it boot against the wrong
-        # bundle and die with "the git source ... is not yet checked out". Every `BUNDLE_*`
-        # matters, not just the obvious ones — `BUNDLE_LOCKFILE` alone is enough to break it.
-        def unbundled_environment
-          removals = ENV.keys.grep(BUNDLER_ENVIRONMENT_PATTERN).to_h { [it, nil] }
+        def unbundled_environment = ChildEnvironment.unbundled
 
-          removals.merge(bundler_original_environment)
-        end
-
-        def bundler_original_environment
-          ENV.keys.grep(/\ABUNDLER_ORIG_/).to_h do |key|
-            original = ENV.fetch(key)
-
-            [key.delete_prefix('BUNDLER_ORIG_'), (original unless original == BUNDLER_UNSET)]
-          end
-        end
+        def with_ruby_warnings(environment) = ChildEnvironment.with_ruby_warnings(environment)
 
         def capture(environment, *arguments, timeout:)
           Open3.popen3(environment, *arguments, pgroup: true) do |stdin, stdout, stderr, wait_thread|

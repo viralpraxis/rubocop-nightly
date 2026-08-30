@@ -51,10 +51,15 @@ module RuboCop
       end
 
       def report_fuzzer_result(result)
+        # Warnings are reported either way: they are worth reading, but a noisy dependency must
+        # not be able to turn an otherwise clean night red.
+        warnings = result.findings.warnings
+        RuboCop::Nightly.logger.info("Collected #{warnings.size} distinct Ruby warning(s)") if warnings.any?
+
         return EXIT_SUCCESS if result.success?
 
         RuboCop::Nightly.logger.error(
-          "Detected #{result.errors.size} cop error(s) across #{result.failed_batches} failed batch(es)"
+          "Detected #{result.findings} across #{result.failed_batches} failed batch(es)"
         )
         EXIT_FAILURE
       end
