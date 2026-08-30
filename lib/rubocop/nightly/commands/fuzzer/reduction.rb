@@ -78,10 +78,14 @@ module RuboCop
           # `--raise-cop-error` is what surfaces the exception class, which is how one crash is
           # told apart from a different bug in the same cop. It aborts on the first error, so it
           # can only ever check a single candidate.
+          #
+          # `--autocorrect` has to be mirrored here: a crash raised from a cop's corrector does not
+          # happen at all on a read-only pass, and the baseline would come back clean — which the
+          # caller reads as "does not reproduce in isolation" and abandons the reduction.
           def raise_cop_error(path, configuration_path)
             stdout, stderr, _status = Runtime.execute(
               path, '--cache', 'false', '--format', 'quiet', '--raise-cop-error',
-              '--config', configuration_path.to_s,
+              '--config', configuration_path.to_s, *('--autocorrect' if autocorrect),
               require_plugins: true, timeout: budget.per_call_timeout,
               bundle_gemfile: Runtime.gems_data_directory.join('Gemfile')
             )

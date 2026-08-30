@@ -33,7 +33,10 @@ RSpec.describe RuboCop::Nightly::CLI do
 
     context 'with the fuzzer command' do
       let(:arguments) { %w[fuzzer --source rubygems] }
-      let(:result) { instance_double(RuboCop::Nightly::Executor::Result, success?: true, errors: [], failed_batches: 0) }
+      let(:findings) { RuboCop::Nightly::Commands::Fuzzer::Findings.new }
+      let(:result) do
+        instance_double(RuboCop::Nightly::Executor::Result, success?: true, findings: findings, failed_batches: 0)
+      end
 
       before do
         allow(RuboCop::Nightly::Source).to receive(:build).and_return(instance_double(RuboCop::Nightly::Source::Rubygems))
@@ -48,8 +51,15 @@ RSpec.describe RuboCop::Nightly::CLI do
 
     context 'with the fuzzer command and detected cop errors' do
       let(:arguments) { %w[fuzzer --source rubygems] }
+      let(:findings) do
+        RuboCop::Nightly::Commands::Fuzzer::Findings.new.tap do |collected|
+          collected.cop_errors << RuboCop::Nightly::Commands::Fuzzer::ErrorDetails.new(
+            cop_name: 'Department/CopName', source_pointer: 'bug.rb:1:1'
+          )
+        end
+      end
       let(:result) do
-        instance_double(RuboCop::Nightly::Executor::Result, success?: false, errors: [:boom], failed_batches: 1)
+        instance_double(RuboCop::Nightly::Executor::Result, success?: false, findings: findings, failed_batches: 1)
       end
 
       before do

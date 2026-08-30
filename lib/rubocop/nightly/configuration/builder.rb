@@ -44,8 +44,13 @@ module RuboCop
           load_configuration_from_rubocop_executable(require_plugins: !@remove_plugins)
         end
 
+        # `--force-default-config` because `--show-cops` otherwise merges every `.rubocop.yml`
+        # found above the working directory. The baseline has to be RuboCop's own defaults: a
+        # project config that happens to be an ancestor would silently reshape the fuzzing
+        # corpus, and one naming a plugin absent from the gems bundle aborts the run outright.
         def load_configuration_from_rubocop_executable(require_plugins: false)
-          stdout, stderr, status = RuboCop::Nightly::Runtime.execute('--show-cops', require_plugins:)
+          stdout, stderr, status =
+            RuboCop::Nightly::Runtime.execute('--show-cops', '--force-default-config', require_plugins:)
 
           unless status.success?
             raise ExecutionError, "`rubocop --show-cops` failed with status #{status.exitstatus}: #{stderr.strip}"
