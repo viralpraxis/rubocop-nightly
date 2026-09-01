@@ -35,7 +35,8 @@ RSpec.describe RuboCop::Nightly::CLI do
       let(:arguments) { %w[fuzzer --source rubygems] }
       let(:findings) { RuboCop::Nightly::Commands::Fuzzer::Findings.new }
       let(:result) do
-        instance_double(RuboCop::Nightly::Executor::Result, success?: true, findings: findings, failed_batches: 0)
+        instance_double(RuboCop::Nightly::Executor::Result, success?: true, findings: findings, failed_batches: 0,
+                                                            timed_out_batches: 0)
       end
 
       before do
@@ -49,6 +50,38 @@ RSpec.describe RuboCop::Nightly::CLI do
       end
     end
 
+    # The shape a real night produces: a noisy dependency and one batch that ran out of wall
+    # clock. The timeout is what fails the run; the warning alone never would.
+    context 'with the fuzzer command, Ruby warnings and a timed-out batch' do
+      let(:arguments) { %w[fuzzer --source rubygems] }
+      let(:findings) do
+        RuboCop::Nightly::Commands::Fuzzer::Findings.new.tap do |collected|
+          collected.warnings << RuboCop::Nightly::Commands::Fuzzer::Findings::Warning.new(
+            origin: '<internal:kernel>', message: 'Float 1e1020 out of range'
+          )
+        end
+      end
+      let(:result) do
+        RuboCop::Nightly::Executor::Result.new(findings: findings, failed_batches: 0, timed_out_batches: 1)
+      end
+
+      before do
+        allow(RuboCop::Nightly::Source).to receive(:build)
+          .and_return(instance_double(RuboCop::Nightly::Source::Rubygems))
+        allow(RuboCop::Nightly::Executor).to receive(:new)
+          .and_return(instance_double(RuboCop::Nightly::Executor, call: result))
+        allow(RuboCop::Nightly.logger).to receive(:info)
+        allow(RuboCop::Nightly.logger).to receive(:warn)
+        allow(RuboCop::Nightly.logger).to receive(:error)
+      end
+
+      it 'fails on the timed-out batch and reports both', :aggregate_failures do
+        expect(cli.run).to eq(described_class::EXIT_FAILURE)
+        expect(RuboCop::Nightly.logger).to have_received(:info).with(/1 distinct Ruby warning/)
+        expect(RuboCop::Nightly.logger).to have_received(:warn).with(/1 batch\(es\) exceeded the batch timeout/)
+      end
+    end
+
     context 'with the fuzzer command and detected cop errors' do
       let(:arguments) { %w[fuzzer --source rubygems] }
       let(:findings) do
@@ -59,7 +92,8 @@ RSpec.describe RuboCop::Nightly::CLI do
         end
       end
       let(:result) do
-        instance_double(RuboCop::Nightly::Executor::Result, success?: false, findings: findings, failed_batches: 1)
+        instance_double(RuboCop::Nightly::Executor::Result, success?: false, findings: findings, failed_batches: 1,
+                                                            timed_out_batches: 0)
       end
 
       before do

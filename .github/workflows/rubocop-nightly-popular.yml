@@ -13,6 +13,10 @@ on:
         description: Ruby files per batch
         required: false
         default: '1000'
+      batch_timeout_seconds:
+        description: Wall-clock limit for a single batch (in seconds)
+        required: false
+        default: '1800'
       time_budget_minutes:
         description: Wall-clock budget for the fuzzer step (in minutes)
         required: false
@@ -102,7 +106,7 @@ jobs:
               --source git \
               --git-sources shard-sources.yml \
               --batch-size "$BATCH_SIZE" \
-              --batch-timeout 900 \
+              --batch-timeout "$BATCH_TIMEOUT" \
               --log-level INFO \
             > fuzzer.stdout.log 2> fuzzer.stderr.log
           status=$?
@@ -111,6 +115,7 @@ jobs:
           exit 0
         env:
           BATCH_SIZE: ${{ inputs.batch_size || '1000' }}
+          BATCH_TIMEOUT: ${{ inputs.batch_timeout_seconds || '1800' }}
           BUDGET: ${{ inputs.time_budget_minutes || '300' }}
 
       - name: Collect artifacts
@@ -135,6 +140,11 @@ jobs:
       - name: Report
         run: |
           status="${{ steps.fuzz.outputs.status }}"
+          # Called out separately from the error below: a skipped batch fails the run,
+          # but for a different reason than a cop that crashed.
+          if grep -qF 'exceeded the batch timeout' fuzzer.stderr.log; then
+            echo "::warning::Some batches exceeded the batch timeout and were skipped"
+          fi
           case "$status" in
             0)   echo "::notice::No cop errors detected" ;;
             124) echo "::warning::Time budget exhausted before the corpus was finished" ;;

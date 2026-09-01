@@ -11,8 +11,15 @@ module RuboCop
       }.freeze
       LOG_LEVELS = %w[DEBUG INFO WARN ERROR FATAL UNKNOWN].freeze
 
-      Result = Data.define(:findings, :failed_batches) do
-        def success? = findings.empty? && failed_batches.zero?
+      # Timed-out batches are counted apart from failed ones so the report can say which of
+      # the two happened, but both move the exit status: a batch that ran out of wall clock
+      # left files uninspected, and that is coverage this night did not get to.
+      Result = Data.define(:findings, :failed_batches, :timed_out_batches) do
+        def initialize(findings:, failed_batches: 0, timed_out_batches: 0)
+          super
+        end
+
+        def success? = findings.empty? && failed_batches.zero? && timed_out_batches.zero?
 
         def errors = findings.cop_errors
       end
@@ -22,6 +29,7 @@ module RuboCop
         @options = DEFAULT_OPTIONS.merge(options.compact)
         @findings = RuboCop::Nightly::Commands::Fuzzer::Findings.new
         @failed_batches = 0
+        @timed_out_batches = 0
       end
 
       def call
@@ -30,7 +38,9 @@ module RuboCop
         base_paths = Corpus.new(source.fetch).files
         process_batches(base_paths) unless nothing_to_do?(base_paths)
 
-        Result.new(findings: @findings, failed_batches: @failed_batches)
+        Result.new(
+          findings: @findings, failed_batches: @failed_batches, timed_out_batches: @timed_out_batches
+        )
       end
 
       private
@@ -54,12 +64,12 @@ module RuboCop
         true
       end
 
-      # One bad batch must not take down a whole nightly run, but it must still be visible
-      # in the exit status.
+      # One bad batch must not take down a whole nightly run, but it must still be visible in
+      # the exit status - whether it crashed or ran out of the time the batch timeout allows.
       def process(batch, index)
         RuboCop::Nightly::Commands::Fuzzer::Runner.new(batch, **runner_options).run
       rescue ExecutionTimeout
-        @failed_batches += 1
+        @timed_out_batches += 1
         RuboCop::Nightly.logger.warn "Processing group #{index.succ} took more than #{batch_timeout}s, aborting"
       rescue StandardError => e
         record_failure(index, e)

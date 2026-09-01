@@ -85,7 +85,15 @@ RSpec.describe RuboCop::Nightly::Executor do
       before { allow(runner).to receive(:run).and_raise(RuboCop::Nightly::ExecutionTimeout) }
 
       it 'records it and carries on' do
-        expect(build(batch_size: 1, batch_timeout: 1).call.failed_batches).to eq(3)
+        expect(build(batch_size: 1, batch_timeout: 1).call.timed_out_batches).to eq(3)
+      end
+
+      it 'does not count it as a failed batch' do
+        expect(build(batch_size: 1, batch_timeout: 1).call.failed_batches).to eq(0)
+      end
+
+      it 'does not report success' do
+        expect(build(batch_size: 1, batch_timeout: 1).call).not_to be_success
       end
     end
 

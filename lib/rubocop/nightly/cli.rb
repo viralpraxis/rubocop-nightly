@@ -51,17 +51,32 @@ module RuboCop
       end
 
       def report_fuzzer_result(result)
-        # Warnings are reported either way: they are worth reading, but a noisy dependency must
-        # not be able to turn an otherwise clean night red.
-        warnings = result.findings.warnings
-        RuboCop::Nightly.logger.info("Collected #{warnings.size} distinct Ruby warning(s)") if warnings.any?
+        report_warnings(result.findings.warnings)
+        report_timed_out_batches(result.timed_out_batches)
 
         return EXIT_SUCCESS if result.success?
 
         RuboCop::Nightly.logger.error(
-          "Detected #{result.findings} across #{result.failed_batches} failed batch(es)"
+          "Detected #{result.findings} across #{result.failed_batches} failed " \
+          "and #{result.timed_out_batches} timed-out batch(es)"
         )
         EXIT_FAILURE
+      end
+
+      # A Ruby warning is worth reading but is not a defect, so it never moves the exit status:
+      # a noisy dependency must not be able to turn an otherwise clean night red. A batch that
+      # ran out of time does fail the run, and is logged separately so the summary cannot be
+      # mistaken for one blaming the warnings.
+      def report_warnings(warnings)
+        return if warnings.empty?
+
+        RuboCop::Nightly.logger.info("Collected #{warnings.size} distinct Ruby warning(s)")
+      end
+
+      def report_timed_out_batches(count)
+        return if count.zero?
+
+        RuboCop::Nightly.logger.warn("#{count} batch(es) exceeded the batch timeout and were skipped")
       end
 
       def run_compare(options)
