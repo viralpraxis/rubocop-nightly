@@ -241,6 +241,42 @@ RSpec.describe RuboCop::Nightly::Configuration do
     end
   end
 
+  describe 'configuration values the corpus cannot satisfy' do
+    let(:inflector_cop) do
+      {
+        'RSpec/SpecFilePathFormat' => {
+          'Enabled' => true,
+          'EnforcedInflector' => 'default',
+          'SupportedInflectors' => %w[default active_support],
+          'InflectorPath' => './config/initializers/inflections.rb'
+        }
+      }
+    end
+
+    # `active_support` makes the cop load `InflectorPath`, which no checkout provides, so every
+    # variant picking it raises and is reported exactly like a real cop crash.
+    it 'never selects the active_support inflector' do
+      configuration = build(raw.merge(inflector_cop))
+      chosen = configuration.variants.map { it.dig('RSpec/SpecFilePathFormat', 'EnforcedInflector') }
+
+      expect(chosen.uniq).to eq(['default'])
+    end
+
+    it 'still runs the cop under the inflector it can satisfy' do
+      configuration = build(raw.merge(inflector_cop))
+      enabled = configuration.variants.select { it.dig('RSpec/SpecFilePathFormat', 'Enabled') }
+
+      expect(enabled).not_to be_empty
+    end
+
+    it 'leaves other cops fully varied' do
+      configuration = build(raw.merge(inflector_cop))
+      styles = configuration.variants.map { it.dig('Style/StringLiterals', 'EnforcedStyle') }
+
+      expect(styles.uniq).to match_array(%w[single_quotes double_quotes])
+    end
+  end
+
   describe '#variants' do
     subject(:variants) { build(raw).variants }
 
