@@ -14,9 +14,9 @@ on:
         required: false
         default: '1000'
       time_budget_minutes:
-        description: Wall-clock budget for the fuzzer step
+        description: Wall-clock budget for the fuzzer step (in seconds)
         required: false
-        default: '240'
+        default: '300'
 
 permissions:
   contents: read
@@ -111,7 +111,7 @@ jobs:
           exit 0
         env:
           BATCH_SIZE: ${{ inputs.batch_size || '1000' }}
-          BUDGET: ${{ inputs.time_budget_minutes || '240' }}
+          BUDGET: ${{ inputs.time_budget_minutes || '300' }}
 
       - name: Collect artifacts
         if: always()
