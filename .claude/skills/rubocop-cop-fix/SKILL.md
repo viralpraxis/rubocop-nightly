@@ -10,7 +10,7 @@ description: Fix a RuboCop cop crash or bad autocorrect and prepare the upstream
 Always end the work by printing an MRE in this format, verified by running it:
 
 ```bash
-bundle exec rubocop --stdin /dev/stdin -a -d --config <(cat <<'YAML'
+bundle exec rubocop --debug --stdin /dev/stdin -a --config <(cat <<'YAML'
 AllCops:
   DisabledByDefault: true
   SuggestExtensions: false
@@ -22,7 +22,7 @@ YAML
 RUBY
 ```
 
-- `-d` prints the backtrace — quote only the cop's own frames, not all 90 lines.
+- `--debug` prints the backtrace — quote only the cop's own frames, not all 90 lines.
 - `-a` never applies a `Safe: false` cop. If nothing reproduces, try `--autocorrect-all`
   before concluding the shape is wrong.
 - Add `AllCops/TargetRubyVersion` only when the syntax needs it (`3.4` for `foo:` value
@@ -30,7 +30,8 @@ RUBY
 - Heredocs, never `echo`/`printf` — these bugs are positional, and reflowing hides them.
 - Minimise by deletion, not by guessing: drop each config key, pair, and character and
   re-run. Identifier *lengths* are often load-bearing — sweep them for the threshold.
-  Use `aa`/`bbb`; never keep names from the corpus file.
+  Once it is not, use the shortest neutral name that still reproduces (`A`, `aa`);
+  never keep names from the corpus file.
 - Under `-a` the crash may only appear on stderr while the run still prints correct
   output and a plausible offence count. Grep for `Error`, don't trust the summary.
 - If the cop has a mirror path (`EnforcedStyle` A vs B, `[]` vs `fetch`), test both —
@@ -65,7 +66,57 @@ existing one.
 
 ## 4. Commit
 
-Subject `Fix an error for \`Cop/Name\` cop`, body `An MRE:` followed by the shell block.
+Subject `Fix an error for \`Cop/Name\` cop`. The body is `An MRE:`, one fenced `bash`
+block, and the attribution line — nothing else:
+
+    An MRE:
+
+    ```bash
+    $ bundle exec rubocop --debug --stdin /dev/stdin -a --config <(cat <<'YAML'
+    AllCops:
+      DisabledByDefault: true
+      SuggestExtensions: false
+    Layout/ElseAlignment:
+      Enabled: true
+    YAML
+    ) <<'RUBY'
+    class A
+    rescue
+    else
+    end
+    RUBY
+    configuration from /proc/self/fd/11
+    Default configuration from config/default.yml
+    Inspecting 1 file
+    Scanning /dev/stdin
+    An error occurred while Layout/ElseAlignment cop was inspecting /dev/stdin:2:0.
+    lib/rubocop/cop/mixin/range_help.rb:104:in 'RuboCop::Cop::RangeHelp#effective_column': undefined method 'line' for nil (NoMethodError)
+
+            if range.line == 1 && @processed_source.raw_source.codepoints.first == BYTE_ORDER_MARK
+                    ^^^^^
+    	from lib/rubocop/cop/mixin/range_help.rb:94:in 'RuboCop::Cop::RangeHelp#column_offset_between'
+    	from lib/rubocop/cop/layout/else_alignment.rb:128:in 'RuboCop::Cop::Layout::ElseAlignment#check_alignment'
+    	from lib/rubocop/cop/layout/else_alignment.rb:54:in 'RuboCop::Cop::Layout::ElseAlignment#on_rescue'
+    	from lib/rubocop/cop/commissioner.rb:109:in 'Kernel#public_send'
+    	from lib/rubocop/cop/commissioner.rb:109:in 'block (2 levels) in RuboCop::Cop::Commissioner#trigger_responding_cops'
+    ```
+
+    Found by `rubocop-nightly`.
+
+Unlike the runnable block in step 1 this is a **transcript**: prompt the command with
+`$ `, and paste the run's own output directly beneath it in the same fence.
+
+- Relativise every absolute path to the repo root (`lib/rubocop/...`,
+  `config/default.yml`) — a `/home/<you>/` prefix is noise upstream.
+- Put the `An error occurred` line where it belongs in the run (after `Scanning`), not
+  wherever the shell happened to flush stderr.
+- Cut the paste after the last cop-specific frame plus a frame or two of `commissioner`.
+  Keep the raising line and its `^^^^^` excerpt; drop the `1 error occurred:` summary,
+  the "Mention the following information" version block, the offence count, and the
+  source echo `-a` prints.
+- No prose rationale and no root-cause paragraphs — the diff and the changelog carry
+  that. Explain the cause in the PR description instead.
+- Close with `Found by \`rubocop-nightly\`.` when the fuzzer surfaced it.
 
 ## Repo hygiene
 
