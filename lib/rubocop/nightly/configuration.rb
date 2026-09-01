@@ -53,6 +53,12 @@ module RuboCop
 
       attr_reader :raw_configuration
 
+      UNSATISFIABLE_VALUES = {
+        'RSpec/SpecFilePathFormat' => { 'SupportedInflectors' => %w[active_support] }
+      }.freeze
+
+      private_constant :UNSATISFIABLE_VALUES
+
       def initialize(raw_configuration)
         @raw_configuration = raw_configuration
       end
@@ -75,8 +81,30 @@ module RuboCop
 
       def traversal_configuration
         cop_names.to_h do |cop_name|
-          [cop_name, raw_configuration[cop_name].slice(*style_parameters.fetch(cop_name, {}).keys)]
+          axes = raw_configuration[cop_name].slice(*style_parameters.fetch(cop_name, {}).keys)
+
+          [cop_name, satisfiable_axes(cop_name, axes)]
         end
+      end
+
+      # A value here makes the cop depend on something no corpus entry provides, so every
+      # variant that picks it fails on its own configuration rather than on the code under
+      # test. RuboCop reports that exactly like a genuine cop crash, so leaving it in buries
+      # real findings under noise that can never be a bug.
+      #
+      # `RSpec/SpecFilePathFormat` under `active_support` loads `InflectorPath`, whose default
+      # `./config/initializers/inflections.rb` exists in a Rails app and in nothing the fuzzer
+      # checks out. The `default` inflector is still exercised.
+      def satisfiable_axes(cop_name, axes)
+        unsatisfiable = UNSATISFIABLE_VALUES[cop_name]
+        return axes unless unsatisfiable
+
+        axes.filter_map do |key, values|
+          next [key, values] unless values.is_a?(Array)
+
+          remaining = values - unsatisfiable.fetch(key, [])
+          [key, remaining] unless remaining.empty?
+        end.to_h
       end
 
       def apply_variant(configuration, variant)
