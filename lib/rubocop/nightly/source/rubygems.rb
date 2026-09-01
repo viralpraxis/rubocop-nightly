@@ -20,9 +20,10 @@ module RuboCop
 
         private_constant(*constants(false))
 
-        def initialize(base_path: DATA_DIRECTORY, max_age_in_days: 1)
+        def initialize(base_path: DATA_DIRECTORY, max_age_in_days: 1, limit: nil)
           @base_path = base_path
           @max_age_in_days = max_age_in_days
+          @limit = limit
         end
 
         def fetch
@@ -39,12 +40,14 @@ module RuboCop
 
         private
 
-        attr_reader :base_path, :max_age_in_days
+        attr_reader :base_path, :max_age_in_days, :limit
 
+        # The feed is ordered most-recently-published first, so `limit` takes the newest
+        # gems rather than an arbitrary slice of the window.
         def recently_published_gems
           published_after = Date.today - max_age_in_days
 
-          parse_json(get(URI(ACTIVITY_URI))).select do |gem|
+          gems = parse_json(get(URI(ACTIVITY_URI))).select do |gem|
             created_at = gem['version_created_at']
             next false if created_at.nil?
 
@@ -52,6 +55,8 @@ module RuboCop
           rescue ArgumentError, TypeError
             false
           end
+
+          limit ? gems.first(limit) : gems
         end
 
         def parse_json(body)

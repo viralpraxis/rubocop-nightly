@@ -1,67 +1,41 @@
-name: nightly
+name: rubocop-nightly-latest
 
+# The 20 most recently published gems on rubygems.org, as a counterweight to
+# rubocop-nightly-popular: that one re-reads a fixed set of large, well-formed
+# repositories, while this one sees whatever Ruby was actually pushed today.
 on:
   schedule:
-    - cron: '17 2 * * *'
+    # rubocop-nightly-popular starts at 02:17 UTC and runs for at most 4.5 hours,
+    # so this one starts once that window has closed. The two also share a
+    # concurrency group, which keeps them apart if that run overruns anyway.
+    - cron: '17 7 * * *'
   workflow_dispatch:
     inputs:
-      git_sources:
-        description: Path to the git sources YAML file
+      gems_limit:
+        description: How many of the most recently published gems to fuzz
         required: false
-        default: config/git.yml
+        default: '20'
       batch_size:
         description: Ruby files per batch
         required: false
         default: '1000'
       time_budget_minutes:
-        description: Wall-clock budget for the fuzzer step (in seconds)
+        description: Wall-clock budget for the fuzzer step (in minutes)
         required: false
-        default: '300'
+        default: '120'
 
 permissions:
   contents: read
 
 concurrency:
-  group: nightly
+  group: rubocop-nightly
   cancel-in-progress: false
 
 jobs:
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.sources.outputs.matrix }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '4.0'
-
-      - name: Build the shard matrix
-        id: sources
-        env:
-          GIT_SOURCES: ${{ inputs.git_sources || 'config/git.yml' }}
-        run: |
-          ruby -ryaml -rjson -e '
-            sources = YAML.safe_load_file(ENV.fetch("GIT_SOURCES"))
-            include = sources.map do |source|
-              url = source.fetch("url")
-              slug = url.sub(%r{\A[a-z]+://}, "").sub(/\.git\z/, "").gsub(%r{[^\w.-]+}, "-")
-              { "url" => url, "branch" => source["branch"], "slug" => slug }
-            end
-            File.open(ENV.fetch("GITHUB_OUTPUT"), "a") { |out| out.puts "matrix=#{JSON.generate({ "include" => include })}" }
-          '
-
   fuzz:
-    needs: prepare
     runs-on: ubuntu-latest
-    timeout-minutes: 350
-    name: ${{ matrix.slug }}
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    timeout-minutes: 150
+    name: rubygems-latest
     env:
       XDG_DATA_HOME: ${{ github.workspace }}/nightly-data
     steps:
@@ -81,26 +55,14 @@ jobs:
           grep -E '^\s+(remote|revision):' "$XDG_DATA_HOME/rubocop-nightly/rubocop-gems/Gemfile.lock" \
             | paste - - | sed 's/remote: //; s/revision: //' | tee revisions.txt
 
-      - name: Write the shard source file
-        env:
-          URL: ${{ matrix.url }}
-          BRANCH: ${{ matrix.branch }}
-        run: |
-          ruby -ryaml -e '
-            entry = { "url" => ENV.fetch("URL") }
-            entry["branch"] = ENV["BRANCH"] unless ENV["BRANCH"].to_s.empty?
-            File.write("shard-sources.yml", YAML.dump([entry]))
-          '
-          cat shard-sources.yml
-
       - name: Fuzz
         id: fuzz
         run: |
           set +e
           timeout --signal=INT "${BUDGET}m" \
             bundle exec bin/rubocop-nightly fuzzer \
-              --source git \
-              --git-sources shard-sources.yml \
+              --source rubygems \
+              --rubygems-limit "$GEMS_LIMIT" \
               --batch-size "$BATCH_SIZE" \
               --batch-timeout 900 \
               --log-level INFO \
@@ -110,8 +72,9 @@ jobs:
           tail -n 200 fuzzer.stderr.log
           exit 0
         env:
+          GEMS_LIMIT: ${{ inputs.gems_limit || '20' }}
           BATCH_SIZE: ${{ inputs.batch_size || '1000' }}
-          BUDGET: ${{ inputs.time_budget_minutes || '300' }}
+          BUDGET: ${{ inputs.time_budget_minutes || '120' }}
 
       - name: Collect artifacts
         if: always()
@@ -127,7 +90,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: nightly-${{ matrix.slug }}
+          name: rubocop-nightly-latest
           path: artifacts
           retention-days: 30
           if-no-files-found: warn
@@ -138,7 +101,7 @@ jobs:
           case "$status" in
             0)   echo "::notice::No cop errors detected" ;;
             124) echo "::warning::Time budget exhausted before the corpus was finished" ;;
-            *)   echo "::error::Fuzzer exited $status - see the nightly-${{ matrix.slug }} artifact"
+            *)   echo "::error::Fuzzer exited $status - see the rubocop-nightly-latest artifact"
                  grep -F 'reproductions' fuzzer.stderr.log | sed 's/^/  /' || true
                  exit 1 ;;
           esac

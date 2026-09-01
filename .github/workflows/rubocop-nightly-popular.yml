@@ -1,0 +1,144 @@
+name: rubocop-nightly-popular
+
+on:
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+    inputs:
+      git_sources:
+        description: Path to the git sources YAML file
+        required: false
+        default: config/git.yml
+      batch_size:
+        description: Ruby files per batch
+        required: false
+        default: '1000'
+      time_budget_minutes:
+        description: Wall-clock budget for the fuzzer step (in minutes)
+        required: false
+        default: '300'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rubocop-nightly
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.sources.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0'
+
+      - name: Build the shard matrix
+        id: sources
+        env:
+          GIT_SOURCES: ${{ inputs.git_sources || 'config/git.yml' }}
+        run: |
+          ruby -ryaml -rjson -e '
+            sources = YAML.safe_load_file(ENV.fetch("GIT_SOURCES"))
+            include = sources.map do |source|
+              url = source.fetch("url")
+              slug = url.sub(%r{\A[a-z]+://}, "").sub(/\.git\z/, "").gsub(%r{[^\w.-]+}, "-")
+              { "url" => url, "branch" => source["branch"], "slug" => slug }
+            end
+            File.open(ENV.fetch("GITHUB_OUTPUT"), "a") { |out| out.puts "matrix=#{JSON.generate({ "include" => include })}" }
+          '
+
+  fuzz:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    name: ${{ matrix.slug }}
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    env:
+      XDG_DATA_HOME: ${{ github.workspace }}/nightly-data
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0'
+          bundler-cache: true
+
+      - name: Install RuboCop master and every extension
+        run: bundle exec rake gems:install
+
+      - name: Record the revisions under test
+        run: |
+          grep -E '^\s+(remote|revision):' "$XDG_DATA_HOME/rubocop-nightly/rubocop-gems/Gemfile.lock" \
+            | paste - - | sed 's/remote: //; s/revision: //' | tee revisions.txt
+
+      - name: Write the shard source file
+        env:
+          URL: ${{ matrix.url }}
+          BRANCH: ${{ matrix.branch }}
+        run: |
+          ruby -ryaml -e '
+            entry = { "url" => ENV.fetch("URL") }
+            entry["branch"] = ENV["BRANCH"] unless ENV["BRANCH"].to_s.empty?
+            File.write("shard-sources.yml", YAML.dump([entry]))
+          '
+          cat shard-sources.yml
+
+      - name: Fuzz
+        id: fuzz
+        run: |
+          set +e
+          timeout --signal=INT "${BUDGET}m" \
+            bundle exec bin/rubocop-nightly fuzzer \
+              --source git \
+              --git-sources shard-sources.yml \
+              --batch-size "$BATCH_SIZE" \
+              --batch-timeout 900 \
+              --log-level INFO \
+            > fuzzer.stdout.log 2> fuzzer.stderr.log
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          tail -n 200 fuzzer.stderr.log
+          exit 0
+        env:
+          BATCH_SIZE: ${{ inputs.batch_size || '1000' }}
+          BUDGET: ${{ inputs.time_budget_minutes || '300' }}
+
+      - name: Collect artifacts
+        if: always()
+        run: |
+          mkdir -p artifacts
+          cp fuzzer.stdout.log fuzzer.stderr.log revisions.txt artifacts/ 2>/dev/null || true
+          if [ -d "$XDG_DATA_HOME/rubocop-nightly/fuzzer/reproductions" ]; then
+            cp -r "$XDG_DATA_HOME/rubocop-nightly/fuzzer/reproductions" artifacts/
+          fi
+          du -sh artifacts
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rubocop-nightly-popular-${{ matrix.slug }}
+          path: artifacts
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Report
+        run: |
+          status="${{ steps.fuzz.outputs.status }}"
+          case "$status" in
+            0)   echo "::notice::No cop errors detected" ;;
+            124) echo "::warning::Time budget exhausted before the corpus was finished" ;;
+            *)   echo "::error::Fuzzer exited $status - see the rubocop-nightly-popular-${{ matrix.slug }} artifact"
+                 grep -F 'reproductions' fuzzer.stderr.log | sed 's/^/  /' || true
+                 exit 1 ;;
+          esac
