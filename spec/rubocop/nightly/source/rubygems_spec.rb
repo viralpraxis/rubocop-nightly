@@ -104,6 +104,47 @@ RSpec.describe RuboCop::Nightly::Source::Rubygems do
     end
   end
 
+  describe 'limit' do
+    def already_extracted(*names)
+      names.each { |name| FileUtils.mkdir_p(File.join(base_path, name, '1.0.0')) }
+    end
+
+    def extracted_path(name) = File.join(base_path, name, '1.0.0')
+
+    it 'keeps only the most recently published gems' do
+      already_extracted('a', 'b', 'c')
+      stub_http(ok(feed(entry(name: 'a'), entry(name: 'b'), entry(name: 'c'))))
+
+      expect(described_class.new(base_path: base_path, limit: 2).fetch)
+        .to eq([extracted_path('a'), extracted_path('b')])
+    end
+
+    it 'keeps every gem in the window when no limit is given' do
+      already_extracted('a', 'b', 'c')
+      stub_http(ok(feed(entry(name: 'a'), entry(name: 'b'), entry(name: 'c'))))
+
+      expect(source.fetch.size).to eq(3)
+    end
+
+    it 'returns fewer than the limit when the window holds fewer gems' do
+      already_extracted('a')
+      stub_http(ok(feed(entry(name: 'a'))))
+
+      expect(described_class.new(base_path: base_path, limit: 20).fetch).to eq([extracted_path('a')])
+    end
+
+    # The limit is applied after the publication window, so a stale entry at the head of the
+    # feed cannot consume one of the slots.
+    it 'does not count entries published outside the window' do
+      already_extracted('a', 'b')
+      stub_http(ok(feed(entry(name: 'stale', created: (Date.today - 30).to_s),
+                        entry(name: 'a'), entry(name: 'b'))))
+
+      expect(described_class.new(base_path: base_path, limit: 2).fetch)
+        .to eq([extracted_path('a'), extracted_path('b')])
+    end
+  end
+
   describe 'checksum verification' do
     it 'rejects a payload whose digest does not match', :aggregate_failures do
       allow(RuboCop::Nightly.logger).to receive(:warn)

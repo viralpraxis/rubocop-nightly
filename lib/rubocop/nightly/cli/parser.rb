@@ -30,6 +30,7 @@ module RuboCop
           :source,
           :mirror_path,
           :git_sources,
+          :rubygems_limit,
           :batch_size,
           :batch_timeout,
           :log_level,
@@ -40,6 +41,7 @@ module RuboCop
             source:,
             mirror_path: nil,
             git_sources: nil,
+            rubygems_limit: nil,
             batch_size: BATCH_SIZE_DEFAULT,
             batch_timeout: nil,
             log_level: 'INFO',
@@ -53,6 +55,7 @@ module RuboCop
             case source
             when 'mirror' then { mirror_path: }
             when 'git' then { sources: git_sources }
+            when 'rubygems' then { limit: rubygems_limit }.compact
             else {}
             end
           end
@@ -83,6 +86,8 @@ module RuboCop
           ['-m MIRROR_PATH', '--mirror-path MIRROR_PATH', 'Mirror data directory path', :mirror_path, nil],
           ['-g GIT_SOURCES', '--git-sources GIT_SOURCES', 'Path to a git sources YAML file',
            :git_sources_path, nil],
+          ['-G RUBYGEMS_LIMIT', '--rubygems-limit RUBYGEMS_LIMIT',
+           'Fuzz only the N most recently published gems (rubygems source)', :rubygems_limit, Integer],
           ['-l LOG_LEVEL', '--log-level LOG_LEVEL', 'Log level', :log_level, nil],
           ['-R', '--[no-]reduce', 'Reduce each crash to a minimal reproducible example (off by default)',
            :reduce, nil],
@@ -185,6 +190,7 @@ module RuboCop
 
             validate_batch_size!(arguments)
             validate_batch_timeout!(arguments)
+            validate_rubygems_limit!(arguments)
             validate_log_level!(arguments)
           end
 
@@ -200,6 +206,13 @@ module RuboCop
             return if batch_timeout.nil? || batch_timeout.positive?
 
             raise UsageError, "--batch-timeout must be a positive integer, got #{batch_timeout}"
+          end
+
+          def validate_rubygems_limit!(arguments)
+            limit = arguments[:rubygems_limit]
+            return if limit.nil? || limit.positive?
+
+            raise UsageError, "--rubygems-limit must be a positive integer, got #{limit}"
           end
 
           def validate_log_level!(arguments)

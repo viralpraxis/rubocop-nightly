@@ -63,6 +63,14 @@ After setting up, you can run regression tests on Ruby code fetched from one of 
    bin/rubocop-nightly fuzzer --source rubygems
    ```
 
+   `--rubygems-limit` caps the run at the N most recently published gems. The feed is
+   ordered newest first and the cap is applied after the one-day window, so stale entries
+   cannot consume the slots. Fewer than N are returned when the window holds fewer.
+
+   ```console
+   bin/rubocop-nightly fuzzer --source rubygems --rubygems-limit 20
+   ```
+
 2. `git`
 
    Fetch [preconfigured git repositories](./config/git.yml).

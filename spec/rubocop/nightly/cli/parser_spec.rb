@@ -139,6 +139,22 @@ RSpec.describe RuboCop::Nightly::CLI::Parser do
       end
     end
 
+    describe 'fuzzer --rubygems-limit' do
+      it 'is absent from the source options by default' do
+        expect(parse('fuzzer', '--source', 'rubygems').source_options).to eq({})
+      end
+
+      it 'is handed to the rubygems source' do
+        expect(parse('fuzzer', '--source', 'rubygems', '--rubygems-limit', '20').source_options)
+          .to eq(limit: 20)
+      end
+
+      it 'rejects a non-positive limit' do
+        expect { parse('fuzzer', '--source', 'rubygems', '--rubygems-limit', '0') }
+          .to raise_error(RuboCop::Nightly::CLI::UsageError, /--rubygems-limit must be a positive integer/)
+      end
+    end
+
     describe 'reduction' do
       it 'is off by default' do
         expect(parse('fuzzer', '--source', 'rubygems').reduce).to be(false)
