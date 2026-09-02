@@ -28,6 +28,9 @@ RUBY
 - Add `AllCops/TargetRubyVersion` only when the syntax needs it (`3.4` for `foo:` value
   omission), otherwise the parser defaults to 2.7 and you get `Lint/Syntax`, not the bug.
 - Heredocs, never `echo`/`printf` — these bugs are positional, and reflowing hides them.
+- `rubocop-rspec` cops only run on spec-shaped paths, so `--stdin /dev/stdin` silently
+  reports no offences. Use `--stdin a_spec.rb`, and add `plugins: - rubocop-rspec`
+  to the config.
 - Minimise by deletion, not by guessing: drop each config key, pair, and character and
   re-run. Identifier *lengths* are often load-bearing — sweep them for the threshold.
   Once it is not, use the shortest neutral name that still reproduces (`A`, `aa`);
@@ -35,7 +38,9 @@ RUBY
 - Under `-a` the crash may only appear on stderr while the run still prints correct
   output and a plausible offence count. Grep for `Error`, don't trust the summary.
 - If the cop has a mirror path (`EnforcedStyle` A vs B, `[]` vs `fetch`), test both —
-  the second is usually broken the same way.
+  the second is usually broken the same way. The same goes for positions within a
+  construct — first pair versus later pairs, receiver versus argument. Test the siblings
+  rather than reasoning that they are fine; that reasoning is what leaves the follow-up.
 
 ## 2. Fix
 
@@ -69,6 +74,18 @@ RUBY
 `spec/project_spec.rb` enforces the numeric link, so a placeholder must still be a
 number — say so when reporting. A separate trigger gets its own entry; never widen an
 existing one.
+
+`rubocop-rspec` has no `changelog/` directory: append one line to the end of
+CHANGELOG.md's `## Master (Unreleased)` section, with no PR link — `- Fix an error for
+\`RSpec/Cop\` when <condition>. ([@viralpraxis])` — and add `[@viralpraxis]:
+https://github.com/viralpraxis` to the alphabetical link list at the bottom.
+`spec/project/changelog_spec.rb` checks both.
+
+Skip the entry entirely when the fix continues an already-merged PR of the same
+investigation — one release note covers both. Name that PR in the commit body instead
+(`Follow-up to #NNNN, which ...`); the CHANGELOG itself never cross-references. Then
+broaden that PR's pending entry so it describes both symptoms, and commit the edit with
+the fix — a note covering two fixes has to read like it.
 
 ## 4. Commit
 
