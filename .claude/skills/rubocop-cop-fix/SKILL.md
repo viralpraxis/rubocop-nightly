@@ -42,9 +42,15 @@ RUBY
 - Branch `fix-an-error-for-<cop-slug>-cop` (`Style/HashLookupMethod` →
   `fix-an-error-for-style-hash-lookup-method-cop`); add `-<detail>` if taken.
 - Prefer narrowing the guard the cop already has over hardening the corrector.
+- Write no comments unless asked. Name the predicate so the diff explains itself; the
+  changelog and PR description carry the reasoning.
 - Add specs to the cop's existing spec file. Confirm they **fail on master** — copy them
   into a `git worktree` at master and run there. A spec that passes both ways is not a
   regression test.
+- Check each new spec is not redundant before keeping it. Break the fix in the plausible
+  over-broad way and rerun: a spec no mutation makes fail is already covered by the
+  existing suite, so drop it. Typically one spec catches the bug and one catches the
+  over-correction — and the second is the one the existing examples rarely cover.
 - `bundle exec rspec spec/rubocop/cop/<dept>/<cop>_spec.rb` and `bundle exec rubocop`
   must both be clean.
 
@@ -66,7 +72,10 @@ existing one.
 
 ## 4. Commit
 
-Subject `Fix an error for \`Cop/Name\` cop`. The body is `An MRE:`, one fenced `bash`
+Always commit when the work is verified — do not leave it in the working tree.
+
+Subject `Fix an error for \`Cop/Name\` cop` (`Fix an infinite loop for ...` for a
+correction loop). The body is `An MRE:`, one fenced `bash`
 block, and the attribution line — nothing else:
 
     An MRE:
