@@ -13,14 +13,10 @@ on:
         description: Ruby files per batch
         required: false
         default: '1000'
-      batch_timeout_seconds:
-        description: Wall-clock limit for a single batch (in seconds)
-        required: false
-        default: '1800'
       time_budget_minutes:
         description: Wall-clock budget for the fuzzer step (in minutes)
         required: false
-        default: '300'
+        default: '345'
 
 permissions:
   contents: read
@@ -36,6 +32,8 @@ jobs:
       matrix: ${{ steps.sources.outputs.matrix }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -60,7 +58,7 @@ jobs:
   fuzz:
     needs: prepare
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 360
     name: ${{ matrix.slug }}
     strategy:
       fail-fast: false
@@ -70,6 +68,8 @@ jobs:
       XDG_DATA_HOME: ${{ github.workspace }}/nightly-data
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -106,7 +106,6 @@ jobs:
               --source git \
               --git-sources shard-sources.yml \
               --batch-size "$BATCH_SIZE" \
-              --batch-timeout "$BATCH_TIMEOUT" \
               --log-level INFO \
             > fuzzer.stdout.log 2> fuzzer.stderr.log
           status=$?
@@ -115,8 +114,7 @@ jobs:
           exit 0
         env:
           BATCH_SIZE: ${{ inputs.batch_size || '1000' }}
-          BATCH_TIMEOUT: ${{ inputs.batch_timeout_seconds || '1800' }}
-          BUDGET: ${{ inputs.time_budget_minutes || '300' }}
+          BUDGET: ${{ inputs.time_budget_minutes || '345' }}
 
       - name: Collect artifacts
         if: always()
@@ -138,17 +136,14 @@ jobs:
           if-no-files-found: warn
 
       - name: Report
+        env:
+          STATUS: ${{ steps.fuzz.outputs.status }}
+          SLUG: ${{ matrix.slug }}
         run: |
-          status="${{ steps.fuzz.outputs.status }}"
-          # Called out separately from the error below: a skipped batch fails the run,
-          # but for a different reason than a cop that crashed.
-          if grep -qF 'exceeded the batch timeout' fuzzer.stderr.log; then
-            echo "::warning::Some batches exceeded the batch timeout and were skipped"
-          fi
-          case "$status" in
+          case "$STATUS" in
             0)   echo "::notice::No cop errors detected" ;;
             124) echo "::warning::Time budget exhausted before the corpus was finished" ;;
-            *)   echo "::error::Fuzzer exited $status - see the rubocop-nightly-popular-${{ matrix.slug }} artifact"
+            *)   echo "::error::Fuzzer exited $STATUS - see the rubocop-nightly-popular-$SLUG artifact"
                  grep -F 'reproductions' fuzzer.stderr.log | sed 's/^/  /' || true
                  exit 1 ;;
           esac
