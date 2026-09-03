@@ -26,6 +26,7 @@ require_relative 'nightly/configuration/dependencies_miner'
 require_relative 'nightly/configuration/traversal'
 require_relative 'nightly/configuration/covering_array'
 
+require_relative 'nightly/source/http'
 require_relative 'nightly/source/rubygems'
 require_relative 'nightly/source/mirror'
 require_relative 'nightly/source/git'

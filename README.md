@@ -53,7 +53,11 @@ After setting up, you can run regression tests on Ruby code fetched from one of 
 1. `rubygems`
 
    Fetch gems published to https://rubygems.org within the last day, from the
-   [activity feed](https://rubygems.org/api/v1/activity/just_updated.json) (50 entries).
+   [timeframe feed](https://rubygems.org/api/v1/timeframe_versions.json), read 30 entries
+   per page until a page comes back empty. rubygems.org takes roughly 450 new versions
+   across roughly 260 distinct gems on a weekday, appreciably fewer at the weekend, so a
+   day's window is a few hundred entries and a dozen or so requests.
+
    Platform-specific builds are fetched separately, and every download is verified against
    the checksum the API reports.
 
@@ -64,11 +68,12 @@ After setting up, you can run regression tests on Ruby code fetched from one of 
    ```
 
    `--rubygems-limit` caps the run at the N most recently published gems. The feed is
-   ordered newest first and the cap is applied after the one-day window, so stale entries
-   cannot consume the slots. Fewer than N are returned when the window holds fewer.
+   ordered oldest first, so it is reversed before the cap applies; the cap is applied after
+   the one-day window, so stale entries cannot consume the slots. Fewer than N are returned
+   when the window holds fewer - which is what a limit above a few hundred will hit.
 
    ```console
-   bin/rubocop-nightly fuzzer --source rubygems --rubygems-limit 20
+   bin/rubocop-nightly fuzzer --source rubygems --rubygems-limit 200
    ```
 
 2. `git`

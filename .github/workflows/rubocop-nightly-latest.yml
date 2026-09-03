@@ -14,7 +14,7 @@ on:
       gems_limit:
         description: How many of the most recently published gems to fuzz
         required: false
-        default: '20'
+        default: '200'
       batch_size:
         description: Ruby files per batch
         required: false
@@ -67,13 +67,13 @@ jobs:
               --rubygems-limit "$GEMS_LIMIT" \
               --batch-size "$BATCH_SIZE" \
               --log-level INFO \
-            > fuzzer.stdout.log 2> fuzzer.stderr.log
+            > >(tee fuzzer.stdout.log) 2> >(tee fuzzer.stderr.log >&2)
           status=$?
+          wait
           echo "status=$status" >> "$GITHUB_OUTPUT"
-          tail -n 200 fuzzer.stderr.log
           exit 0
         env:
-          GEMS_LIMIT: ${{ inputs.gems_limit || '20' }}
+          GEMS_LIMIT: ${{ inputs.gems_limit || '200' }}
           BATCH_SIZE: ${{ inputs.batch_size || '1000' }}
           BUDGET: ${{ inputs.time_budget_minutes || '345' }}
 

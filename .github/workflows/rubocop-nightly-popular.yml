@@ -107,10 +107,12 @@ jobs:
               --git-sources shard-sources.yml \
               --batch-size "$BATCH_SIZE" \
               --log-level INFO \
-            > fuzzer.stdout.log 2> fuzzer.stderr.log
+            > >(tee fuzzer.stdout.log) 2> >(tee fuzzer.stderr.log >&2)
           status=$?
+          # The `tee` processes outlive the redirection they serve, so without this the logs
+          # can still be short when the next step reads them.
+          wait
           echo "status=$status" >> "$GITHUB_OUTPUT"
-          tail -n 200 fuzzer.stderr.log
           exit 0
         env:
           BATCH_SIZE: ${{ inputs.batch_size || '1000' }}

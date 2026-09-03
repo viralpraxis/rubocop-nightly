@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require 'net/http'
 require 'json'
 require 'digest'
 require 'fileutils'
@@ -13,12 +12,12 @@ module RuboCop
     module Source
       class Rubygems
         DATA_DIRECTORY = Runtime.data_directory.join('rubygems').freeze
-        ACTIVITY_URI = 'https://rubygems.org/api/v1/activity/just_updated.json'
-        OPEN_TIMEOUT = 10
-        READ_TIMEOUT = 60
-        MAX_REDIRECTS = 5
+        VERSIONS_URI = 'https://rubygems.org/api/v1/timeframe_versions.json'
+        MAX_PAGES = 200
 
         private_constant(*constants(false))
+
+        include Http
 
         def initialize(base_path: DATA_DIRECTORY, max_age_in_days: 1, limit: nil)
           @base_path = base_path
@@ -42,21 +41,40 @@ module RuboCop
 
         attr_reader :base_path, :max_age_in_days, :limit
 
-        # The feed is ordered most-recently-published first, so `limit` takes the newest
-        # gems rather than an arbitrary slice of the window.
+        # The timeframe feed is ordered oldest-first, so it is reversed before `limit`
+        # applies: the point of the limit is to take the newest gems rather than an
+        # arbitrary slice of the window.
+        #
+        # `activity/just_updated.json` would be one request instead of a dozen, but it is
+        # capped at 50 entries - under two hours of rubygems.org, which publishes roughly
+        # 450 versions a day - which puts any larger limit out of reach.
         def recently_published_gems
           published_after = Date.today - max_age_in_days
 
-          gems = parse_json(get(URI(ACTIVITY_URI))).select do |gem|
-            created_at = gem['version_created_at']
+          gems = published_versions.select do |gem|
+            created_at = gem['version_created_at'] || gem['created_at']
             next false if created_at.nil?
 
             Date.parse(created_at) > published_after
           rescue ArgumentError, TypeError
             false
-          end
+          end.reverse
 
           limit ? gems.first(limit) : gems
+        end
+
+        # `from` is the first instant the filter above would accept, so no page is fetched
+        # only to be discarded. Paging stops on the first empty page; MAX_PAGES is a backstop
+        # against a feed that never returns one.
+        def published_versions
+          from = "#{Date.today - max_age_in_days + 1}T00:00:00Z"
+          to = Time.now.utc.strftime('%FT%TZ')
+
+          (1..MAX_PAGES).each_with_object([]) do |page, versions|
+            batch = parse_json(get(URI("#{VERSIONS_URI}?from=#{from}&to=#{to}&page=#{page}")))
+            versions.concat(batch)
+            break versions if batch.empty?
+          end
         end
 
         def parse_json(body)
@@ -65,7 +83,7 @@ module RuboCop
           raise ExecutionError, "rubygems.org returned an unparseable response: #{e.message}"
         end
 
-        # The activity feed lists one entry per (name, version, platform), so the platform has
+        # The feed lists one entry per (name, version, platform), so the platform has
         # to be part of both the download URL and the extraction path — otherwise every
         # platform variant collapses onto one directory and is silently skipped.
         def download_and_extract_gem(gem)
@@ -120,25 +138,6 @@ module RuboCop
           return if actual == expected_checksum
 
           raise ExecutionError, "checksum mismatch for #{uri}: expected #{expected_checksum}, got #{actual}"
-        end
-
-        def get(uri, redirects_left: MAX_REDIRECTS)
-          response = Net::HTTP.start(
-            uri.host, uri.port,
-            use_ssl: uri.scheme == 'https', open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT
-          ) { it.request(Net::HTTP::Get.new(uri)) }
-
-          case response
-          when Net::HTTPSuccess then response.body
-          when Net::HTTPRedirection then follow_redirect(uri, response, redirects_left)
-          else raise ExecutionError, "GET #{uri} failed with #{response.code} #{response.message}"
-          end
-        end
-
-        def follow_redirect(uri, response, redirects_left)
-          raise ExecutionError, "too many redirects for #{uri}" if redirects_left.zero?
-
-          get(URI.join(uri.to_s, response.fetch('location')), redirects_left: redirects_left - 1)
         end
 
         def extract_gem(archive, destination)
