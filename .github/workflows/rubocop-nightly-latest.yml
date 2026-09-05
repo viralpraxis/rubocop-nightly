@@ -23,6 +23,10 @@ on:
         description: Wall-clock budget for the fuzzer step (in minutes)
         required: false
         default: '345'
+      autocorrect:
+        description: Exercise the correction path too (correction loops and broken corrections)
+        required: false
+        default: 'true'
 
 permissions:
   contents: read
@@ -67,6 +71,7 @@ jobs:
               --rubygems-limit "$GEMS_LIMIT" \
               --batch-size "$BATCH_SIZE" \
               --log-level INFO \
+              "$AUTOCORRECT_FLAG" \
             > >(tee fuzzer.stdout.log) 2> >(tee fuzzer.stderr.log >&2)
           status=$?
           wait
@@ -76,6 +81,7 @@ jobs:
           GEMS_LIMIT: ${{ inputs.gems_limit || '200' }}
           BATCH_SIZE: ${{ inputs.batch_size || '1000' }}
           BUDGET: ${{ inputs.time_budget_minutes || '345' }}
+          AUTOCORRECT_FLAG: ${{ inputs.autocorrect == 'false' && '--no-autocorrect' || '--autocorrect' }}
 
       - name: Collect artifacts
         if: always()
@@ -101,7 +107,7 @@ jobs:
           STATUS: ${{ steps.fuzz.outputs.status }}
         run: |
           case "$STATUS" in
-            0)   echo "::notice::No cop errors detected" ;;
+            0)   echo "::notice::No defects detected" ;;
             124) echo "::warning::Time budget exhausted before the corpus was finished" ;;
             *)   echo "::error::Fuzzer exited $STATUS - see the rubocop-nightly-latest artifact"
                  grep -F 'reproductions' fuzzer.stderr.log | sed 's/^/  /' || true
