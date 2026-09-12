@@ -18,3 +18,5 @@ vendor/
 
 # Ad-hoc cop-config dumps
 test.yml
+
+/.claude/skills/rubocop-cop-fix/
