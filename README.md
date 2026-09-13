@@ -48,6 +48,11 @@ This installs the preconfigured gems into either:
 - `$XDG_DATA_HOME/rubocop-nightly/rubocop-gems`, if `XDG_DATA_HOME` is set;
 - `~/.local/share/rubocop-nightly/rubocop-gems`, otherwise.
 
+Set `GEMS_SCOPE=core` to install RuboCop itself and nothing else, which pairs with the fuzzer's
+`--no-plugins`: there is no point cloning a dozen extensions from `master` when the run is
+confined to RuboCop's own cops. Any other value (or none) installs everything in
+[`config/gems.yml`](./config/gems.yml).
+
 After setting up, you can run regression tests on Ruby code fetched from one of the supported **sources**:
 
 1. `rubygems`
@@ -149,6 +154,21 @@ All sources support the following CLI options:
    directory is removed when the batch ends.
 
    Use `--no-autocorrect` to be explicit.
+
+- `--plugins` (default: on)
+
+   Fuzz the extension cops alongside the core ones. `--no-plugins` confines the run to RuboCop
+   itself: `--show-cops` is asked for the core set alone, the `plugins`/`require` keys are dropped
+   from the generated configuration, and no `--plugin` directive is passed to the RuboCop child.
+   That last part matters — loading a plugin registers its cops *and* merges its own defaults, so
+   requiring one against a core-only configuration would quietly put every plugin cop back into
+   the run.
+
+   Against the current [`config/gems.yml`](./config/gems.yml) this is the difference between
+   **1065** cops and **613**.
+
+   The nightly workflows pass `--no-plugins` by default. Dispatch them with `plugins: true` to
+   put the extensions back for a one-off run.
 
 - `--log-level` (default: `INFO`)
 
