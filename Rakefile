@@ -12,13 +12,13 @@ RuboCop::RakeTask.new
 task default: %i[spec rubocop]
 
 namespace :gems do
-  desc 'install latest rubocop gems from `config/gems.yml` sources'
+  desc 'install latest rubocop gems from `config/gems.yml` sources (GEMS_SCOPE=core installs RuboCop alone)'
   task :install do
     require 'yaml'
     require 'fileutils'
     require_relative 'lib/rubocop/nightly'
 
-    gems_config = YAML.safe_load_file(File.join(__dir__, 'config', 'gems.yml'))
+    gems_config = scoped_gems_config(YAML.safe_load_file(File.join(__dir__, 'config', 'gems.yml')))
     data_directory = RuboCop::Nightly::Runtime.gems_data_directory
 
     FileUtils.mkdir_p(data_directory)
@@ -35,6 +35,15 @@ namespace :gems do
       end
     end
   end
+end
+
+# `GEMS_SCOPE=core` pairs with the fuzzer's `--no-plugins`: there is no point cloning a dozen
+# extensions from master when the run is confined to RuboCop's own cops. Any other value keeps
+# everything, so an unset variable behaves exactly as before.
+def scoped_gems_config(gems_config)
+  return gems_config unless ENV.fetch('GEMS_SCOPE', nil) == 'core'
+
+  gems_config.select { |gem_config| gem_config['type'] == 'core' }
 end
 
 # Runs through a shell by design (the scripts use `$(...)`), so these values are trusted

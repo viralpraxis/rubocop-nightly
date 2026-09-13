@@ -14,9 +14,14 @@ module RuboCop
           Outcome = Data.define(:index, :configuration_path, :stdout, :stderr, :variant)
 
           class << self
-            def build_configuration
+            # Without `plugins` the run is confined to RuboCop's own cops: `--show-cops` is asked
+            # for the core set alone, and the department filter then catches anything a plugin
+            # might still have registered.
+            def build_configuration(plugins: true)
               Dir.chdir(Runtime.gems_data_directory) do
-                Configuration.build(parser_engine: 'parser_prism')
+                Configuration.build(
+                  parser_engine: 'parser_prism', remove_plugins: !plugins, keep_core_departments: !plugins
+                )
               end
             rescue Errno::ENOENT
               raise ConfigurationError,
@@ -29,12 +34,13 @@ module RuboCop
           # reported again in every subsequent one.
           def initialize( # rubocop:disable Metrics/ParameterLists
             target_paths, configuration: nil, timeout: nil,
-            findings: Findings.new, reduce: false, autocorrect: false
+            findings: Findings.new, reduce: false, autocorrect: false, plugins: true
           )
             super()
 
             @target_paths = [*target_paths]
-            @configuration = configuration || self.class.build_configuration
+            @plugins = plugins
+            @configuration = configuration || self.class.build_configuration(plugins:)
             @timeout = timeout
             @findings = findings
             @reduce = reduce
@@ -58,7 +64,7 @@ module RuboCop
 
           private
 
-          attr_reader :target_paths, :configuration, :findings, :reduce, :autocorrect
+          attr_reader :target_paths, :configuration, :findings, :reduce, :autocorrect, :plugins
 
           def run_variant(configuration_variant, index, configuration_path, deadline)
             File.write(configuration_path, configuration_variant.to_yaml)
@@ -84,9 +90,12 @@ module RuboCop
 
           def invoke_rubocop(configuration_path, paths, timeout)
             Dir.chdir(Runtime.gems_data_directory) do
+              # The plugin requires have to follow the configuration: loading a plugin registers
+              # its cops and merges its own defaults, so requiring them against a core-only
+              # configuration would quietly put every plugin cop back in the run.
               Runtime.execute(
                 *rubocop_arguments(configuration_path, paths),
-                require_plugins: true, timeout: timeout, warnings: true
+                require_plugins: plugins, timeout: timeout, warnings: true
               )
             end
           end

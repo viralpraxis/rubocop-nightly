@@ -85,6 +85,23 @@ RSpec.describe RuboCop::Nightly::CLI::Parser do
         expect(parse('fuzzer', '--source', 'rubygems', '--reduce').executor_options).to include(reduce: true)
       end
 
+      it 'fuzzes the extension cops by default' do
+        expect(parse('fuzzer', '--source', 'rubygems').plugins).to be(true)
+      end
+
+      it 'confines the run to core cops with --no-plugins' do
+        expect(parse('fuzzer', '--source', 'rubygems', '--no-plugins').plugins).to be(false)
+      end
+
+      it 'accepts --no-plugins on its short form too' do
+        expect(parse('fuzzer', '--source', 'rubygems', '-p').plugins).to be(true)
+      end
+
+      it 'passes the plugin choice through to the executor' do
+        expect(parse('fuzzer', '--source', 'rubygems', '--no-plugins').executor_options)
+          .to include(plugins: false)
+      end
+
       it 'accepts --batch-timeout on both its short and long form', :aggregate_failures do
         expect(parse('fuzzer', '--source', 'rubygems', '-t', '5').batch_timeout).to eq(5)
         expect(parse('fuzzer', '--source', 'rubygems', '--batch-timeout', '5').batch_timeout).to eq(5)

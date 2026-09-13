@@ -35,7 +35,8 @@ module RuboCop
           :batch_timeout,
           :log_level,
           :reduce,
-          :autocorrect
+          :autocorrect,
+          :plugins
         ) do
           def initialize( # rubocop:disable Metrics/ParameterLists
             source:,
@@ -46,7 +47,8 @@ module RuboCop
             batch_timeout: nil,
             log_level: 'INFO',
             reduce: false,
-            autocorrect: false
+            autocorrect: false,
+            plugins: true
           )
             super
           end
@@ -61,7 +63,7 @@ module RuboCop
           end
 
           def executor_options
-            { batch_size:, batch_timeout:, log_level:, reduce:, autocorrect: }
+            { batch_size:, batch_timeout:, log_level:, reduce:, autocorrect:, plugins: }
           end
 
           def command = :fuzzer
@@ -92,7 +94,9 @@ module RuboCop
           ['-R', '--[no-]reduce', 'Reduce each crash to a minimal reproducible example (off by default)',
            :reduce, nil],
           ['-A', '--[no-]autocorrect', 'Exercise the correction path too, against throwaway copies ' \
-                                       'of the corpus (off by default)', :autocorrect, nil]
+                                       'of the corpus (off by default)', :autocorrect, nil],
+          ['-p', '--[no-]plugins', 'Fuzz the extension cops as well as the core ones (on by default); ' \
+                                   '--no-plugins confines the run to RuboCop itself', :plugins, nil]
         ].freeze
         private_constant :FUZZER_SWITCHES
 

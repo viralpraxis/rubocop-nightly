@@ -7,7 +7,8 @@ module RuboCop
       # meant a single timeout lost every result; at 1000 files the RuboCop start-up cost
       # (~0.5s against ~0.05s per file) stays around 1% while the blast radius drops ~17x.
       DEFAULT_OPTIONS = {
-        batch_size: 1000, batch_timeout: nil, log_level: 'INFO', reduce: false, autocorrect: false
+        batch_size: 1000, batch_timeout: nil, log_level: 'INFO',
+        reduce: false, autocorrect: false, plugins: true
       }.freeze
       LOG_LEVELS = %w[DEBUG INFO WARN ERROR FATAL UNKNOWN].freeze
 
@@ -78,7 +79,8 @@ module RuboCop
       def runner_options
         {
           configuration:, timeout: batch_timeout, findings: @findings,
-          reduce: options.fetch(:reduce), autocorrect: options.fetch(:autocorrect)
+          reduce: options.fetch(:reduce), autocorrect: options.fetch(:autocorrect),
+          plugins: options.fetch(:plugins)
         }
       end
 
@@ -91,7 +93,8 @@ module RuboCop
       # Built once and shared by every batch: it costs a `rubocop --show-cops` subprocess,
       # a dependency-mining pass over every cop source, and the variant generation.
       def configuration
-        @configuration ||= RuboCop::Nightly::Commands::Fuzzer::Runner.build_configuration
+        @configuration ||=
+          RuboCop::Nightly::Commands::Fuzzer::Runner.build_configuration(plugins: options.fetch(:plugins))
       end
 
       def batch_size
