@@ -8,7 +8,7 @@ module RuboCop
       # (~0.5s against ~0.05s per file) stays around 1% while the blast radius drops ~17x.
       DEFAULT_OPTIONS = {
         batch_size: 1000, batch_timeout: nil, log_level: 'INFO',
-        reduce: false, autocorrect: false, plugins: true
+        reduce: false, autocorrect: false, plugins: true, only_show_types: nil
       }.freeze
       LOG_LEVELS = %w[DEBUG INFO WARN ERROR FATAL UNKNOWN].freeze
 
@@ -80,7 +80,7 @@ module RuboCop
         {
           configuration:, timeout: batch_timeout, findings: @findings,
           reduce: options.fetch(:reduce), autocorrect: options.fetch(:autocorrect),
-          plugins: options.fetch(:plugins)
+          plugins: options.fetch(:plugins), only_show_types: options.fetch(:only_show_types)
         }
       end
 

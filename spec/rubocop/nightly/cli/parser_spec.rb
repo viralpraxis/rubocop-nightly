@@ -102,6 +102,50 @@ RSpec.describe RuboCop::Nightly::CLI::Parser do
           .to include(plugins: false)
       end
 
+      it 'shows every issue type by default' do
+        expect(parse('fuzzer', '--source', 'rubygems').only_show_types).to be_nil
+      end
+
+      it 'accepts a single issue type' do
+        expect(parse('fuzzer', '--source', 'rubygems', '--only-show-types', 'broken-correction').only_show_types)
+          .to eq(['broken-correction'])
+      end
+
+      it 'accepts a comma separated list' do
+        expect(parse('fuzzer', '--source', 'rubygems', '--only-show-types', 'exception,infinite-loop').only_show_types)
+          .to eq(%w[exception infinite-loop])
+      end
+
+      it 'tolerates spaces around the commas' do
+        expect(parse('fuzzer', '--source', 'rubygems', '--only-show-types', 'exception, infinite-loop').only_show_types)
+          .to eq(%w[exception infinite-loop])
+      end
+
+      it 'accepts the short form' do
+        expect(parse('fuzzer', '--source', 'rubygems', '-T', 'exception').only_show_types).to eq(['exception'])
+      end
+
+      it 'passes the filter through to the executor' do
+        expect(parse('fuzzer', '--source', 'rubygems', '-T', 'exception').executor_options)
+          .to include(only_show_types: ['exception'])
+      end
+
+      it 'rejects an unknown issue type, listing the ones that exist' do
+        expect { parse('fuzzer', '--source', 'rubygems', '--only-show-types', 'nope') }
+          .to raise_error(RuboCop::Nightly::CLI::UsageError, /unknown issue type.*broken-correction/m)
+      end
+
+      # Filtering the report down to nothing is a mistake rather than an intention.
+      it 'rejects an empty list' do
+        expect { parse('fuzzer', '--source', 'rubygems', '--only-show-types', '') }
+          .to raise_error(RuboCop::Nightly::CLI::UsageError, /needs at least one type/)
+      end
+
+      it 'names every known type in its help text' do
+        expect(parse('fuzzer', '--help').text)
+          .to include(*RuboCop::Nightly::Commands::Fuzzer::Findings::ISSUE_TYPES)
+      end
+
       it 'accepts --batch-timeout on both its short and long form', :aggregate_failures do
         expect(parse('fuzzer', '--source', 'rubygems', '-t', '5').batch_timeout).to eq(5)
         expect(parse('fuzzer', '--source', 'rubygems', '--batch-timeout', '5').batch_timeout).to eq(5)

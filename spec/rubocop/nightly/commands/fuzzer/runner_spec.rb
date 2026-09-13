@@ -196,6 +196,125 @@ RSpec.describe RuboCop::Nightly::Commands::Fuzzer::Runner do
     end
   end
 
+  # The whole point of handing the MRE location back to the reporter instead of logging it where
+  # it is written: thirty defects in a night should be thirty lines, not sixty interleaved halves.
+  describe 'one line per defect' do
+    let(:configuration) do
+      RuboCop::Nightly::Configuration.build({ 'Style/Thing' => { 'Enabled' => true } })
+    end
+    let(:source_file) { File.join(data_home, 'bug.rb') }
+
+    before do
+      File.write(source_file, "class Foo\n  BAR = 1\nend\n")
+      allow(RuboCop::Nightly::Runtime).to receive(:execute).and_return(
+        ['', "An error occurred while Style/Thing cop was inspecting #{source_file}:2:1.\n",
+         instance_double(Process::Status, success?: true, exitstatus: 0)]
+      )
+      allow(RuboCop::Nightly.logger).to receive(:error)
+      allow(RuboCop::Nightly.logger).to receive(:info)
+    end
+
+    it 'reports the crash and where its example landed on the same line' do
+      runner.run
+
+      expect(RuboCop::Nightly.logger).to have_received(:error).with(
+        %r{Style/Thing: #{Regexp.escape(source_file)}:2:1 -> mre/Style-Thing-[0-9a-f]{8}/mre\.sh \(whole file\)}
+      )
+    end
+
+    it 'still names the reproduction directory the example sits under' do
+      runner.run
+
+      expect(RuboCop::Nightly.logger).to have_received(:error).with(%r{\A\[.*reproductions/variant-0-\h{8}\] })
+    end
+
+    it 'logs nothing else about the MRE' do
+      runner.run
+
+      expect(RuboCop::Nightly.logger).not_to have_received(:info)
+    end
+
+    it 'emits exactly one line for the crash' do
+      runner.run
+
+      expect(RuboCop::Nightly.logger).to have_received(:error).once
+    end
+
+    it 'says so on the same line when no example could be written' do
+      FileUtils.rm_f(source_file)
+      runner.run
+
+      expect(RuboCop::Nightly.logger).to have_received(:error).with(/-> no MRE: no source file\z/)
+    end
+  end
+
+  describe 'issue-type tags and --only-show-types' do
+    let(:configuration) do
+      RuboCop::Nightly::Configuration.build({ 'Style/Thing' => { 'Enabled' => true } })
+    end
+    let(:source_file) { File.join(data_home, 'bug.rb') }
+    let(:stderr) do
+      "An error occurred while Style/Thing cop was inspecting #{source_file}:2:1.\n" \
+        "Infinite loop detected in #{source_file} and caused by Style/A -> Style/B\n"
+    end
+
+    before do
+      File.write(source_file, "class Foo\n  BAR = 1\nend\n")
+      allow(RuboCop::Nightly::Runtime).to receive(:execute).and_return(
+        ['', stderr, instance_double(Process::Status, success?: true, exitstatus: 0)]
+      )
+      allow(RuboCop::Nightly.logger).to receive(:error)
+    end
+
+    def run_with(**)
+      described_class.new(['/a.rb'], configuration: configuration, **).run
+    end
+
+    it 'tags a cop crash' do
+      run_with
+
+      expect(RuboCop::Nightly.logger).to have_received(:error).with(/\A\[exception\] /)
+    end
+
+    it 'tags a correction loop' do
+      run_with
+
+      expect(RuboCop::Nightly.logger).to have_received(:error).with(/\A\[infinite-loop\] /)
+    end
+
+    it 'reports both kinds when nothing is filtered' do
+      run_with
+
+      expect(RuboCop::Nightly.logger).to have_received(:error).twice
+    end
+
+    it 'reports only the requested kind' do
+      run_with(only_show_types: ['infinite-loop'])
+
+      expect(RuboCop::Nightly.logger).to have_received(:error).once.with(/\A\[infinite-loop\] /)
+    end
+
+    it 'can select several kinds at once' do
+      run_with(only_show_types: %w[exception infinite-loop])
+
+      expect(RuboCop::Nightly.logger).to have_received(:error).twice
+    end
+
+    # Filtering narrows the report, not the run: a hidden defect still fails the night.
+    it 'still collects what it does not show', :aggregate_failures do
+      findings = run_with(only_show_types: ['infinite-loop'])
+
+      expect(findings.cop_errors.size).to eq(1)
+      expect(findings.defects).to eq(2)
+    end
+
+    it 'still writes the evidence for what it does not show' do
+      run_with(only_show_types: ['infinite-loop'])
+
+      expect(Pathname.glob(reproduction_directories.fetch(0).join('mre/*/mre.sh'))).not_to be_empty
+    end
+  end
+
   describe 'Ruby warnings' do
     let(:configuration) do
       RuboCop::Nightly::Configuration.build({ 'Department/CopName1' => { 'Enabled' => true } })

@@ -18,14 +18,18 @@ module RuboCop
           # Every crash gets its own directory, keyed by cop and by the exact location it was
           # reported at, so several crashes in one variant can never overwrite one another's
           # report — `RSpec/SpecFilePathFormat` alone hit seven different files in one batch.
+          # Returns where the example landed, for the caller to report on the same line as the
+          # crash itself; a failure comes back as a reason rather than a log line of its own.
           def self.write_mre(crash, variant, directory, reduce: false, autocorrect: false)
             target = directory.join('mre', slug(crash))
             FileUtils.mkdir_p(target)
 
             result = (reduce_crash(crash, variant, autocorrect) if reduce)
-            result ? write_reduced(target, result) : write_whole_file(target, crash, variant, autocorrect:)
+            return write_reduced(target, result, directory) if result
+
+            write_whole_file(target, crash, variant, directory, autocorrect: autocorrect)
           rescue StandardError => e
-            RuboCop::Nightly.logger.warn("Could not write MRE for #{crash.cop_name}: #{e.class}: #{e.message}")
+            Mre.failed("#{e.class}: #{e.message}")
           end
 
           def self.slug(crash)
@@ -41,30 +45,31 @@ module RuboCop
             nil
           end
 
-          def self.write_reduced(target, result)
+          def self.write_reduced(target, result, directory)
             File.write(target.join('mre.rb'), result.source)
             File.write(target.join('mre.yml'), result.configuration.to_yaml)
-            write_script(target, result.command)
 
-            RuboCop::Nightly.logger.info(summarize(result, target))
+            Mre.written(write_script(target, result.command), directory, summarize(result))
           end
 
-          def self.summarize(result, target)
-            "Reduced #{result.signature.describe} to #{result.source.lines.size} line(s) " \
-              "from #{result.original_size} [#{result.budget}] -> #{target.join('mre.sh')}"
+          # The cop name is already on the line this ends up in, so only the exception class is
+          # repeated back — that is what tells one crash apart from a different bug in the same cop.
+          def self.summarize(result)
+            "#{result.signature.exception_class}; reduced to #{result.source.lines.size} line(s) " \
+              "from #{result.original_size}; #{result.budget}"
           end
 
           # Not minimal, but it always reproduces. The file is referenced rather than inlined:
           # an unreduced corpus file can be thousands of lines, and embedding it would make the
           # script unreadable for no benefit.
-          def self.write_whole_file(target, crash, variant, autocorrect: false)
-            return RuboCop::Nightly.logger.warn("No source file for #{crash.cop_name}") unless readable?(crash)
+          def self.write_whole_file(target, crash, variant, directory, autocorrect: false)
+            return Mre.failed('no source file') unless readable?(crash)
 
             configuration = MinimalConfiguration.new(variant, crash.cop_name)
             File.write(target.join('mre.yml'), configuration.to_yaml)
-            write_script(target, whole_file_command(crash, configuration, autocorrect: autocorrect))
+            script = write_script(target, whole_file_command(crash, configuration, autocorrect: autocorrect))
 
-            RuboCop::Nightly.logger.info("Wrote whole-file MRE for #{crash.cop_name} -> #{target.join('mre.sh')}")
+            Mre.written(script, directory, 'whole file')
           end
 
           def self.readable?(crash) = crash.path && File.file?(crash.path)

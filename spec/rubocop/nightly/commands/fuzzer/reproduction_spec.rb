@@ -52,12 +52,29 @@ RSpec.describe RuboCop::Nightly::Commands::Fuzzer::Reproduction do
       expect(script.read).to include('--only Style/Thing').and include(target)
     end
 
-    it 'warns and writes nothing when the source file is gone' do
+    it 'reports the reason instead of a location when the source file is gone' do
       FileUtils.rm_f(target)
 
+      expect(described_class.write_mre(crash, variant, directory).to_s).to eq('no MRE: no source file')
+    end
+
+    it 'returns the script location, relative to the reproduction directory' do
+      expect(described_class.write_mre(crash, variant, directory).to_s)
+        .to match(%r{\Amre/Style-Thing-[0-9a-f]{8}/mre\.sh \(whole file\)\z})
+    end
+
+    # The location is reported by the caller on the crash's own line, so writing it here as well
+    # would put every defect back on two lines.
+    it 'does not log a line of its own' do
       described_class.write_mre(crash, variant, directory)
 
-      expect(RuboCop::Nightly.logger).to have_received(:warn).with(/No source file/)
+      expect(RuboCop::Nightly.logger).not_to have_received(:info)
+    end
+
+    it 'reports the reason instead of a location when writing blows up' do
+      allow(File).to receive(:write).and_raise(Errno::EACCES, 'mre.yml')
+
+      expect(described_class.write_mre(crash, variant, directory).to_s).to include('no MRE: Errno::EACCES')
     end
 
     it 'falls back to the whole file when reduction yields nothing' do
@@ -80,7 +97,7 @@ RSpec.describe RuboCop::Nightly::Commands::Fuzzer::Reproduction do
       result = instance_double(
         RuboCop::Nightly::Commands::Fuzzer::Reduction::Result,
         source: "class Foo\nend\n", configuration: { 'Style/Thing' => {} }, command: "echo hi\n",
-        signature: instance_double(RuboCop::Nightly::Commands::Fuzzer::Signature, describe: 'Style/Thing (X)'),
+        signature: instance_double(RuboCop::Nightly::Commands::Fuzzer::Signature, exception_class: 'X'),
         original_size: 3, budget: 'budget'
       )
       allow(RuboCop::Nightly::Commands::Fuzzer::Reduction).to receive(:call).and_return(result)
@@ -88,6 +105,19 @@ RSpec.describe RuboCop::Nightly::Commands::Fuzzer::Reproduction do
       described_class.write_mre(crash, variant, directory, reduce: true)
 
       expect(written).to eq(%w[mre.rb mre.sh mre.yml])
+    end
+
+    it 'carries the exception class and the shrink back with the location' do
+      result = instance_double(
+        RuboCop::Nightly::Commands::Fuzzer::Reduction::Result,
+        source: "class Foo\nend\n", configuration: { 'Style/Thing' => {} }, command: "echo hi\n",
+        signature: instance_double(RuboCop::Nightly::Commands::Fuzzer::Signature, exception_class: 'NoMethodError'),
+        original_size: 412, budget: '4 call(s), 2.1s'
+      )
+      allow(RuboCop::Nightly::Commands::Fuzzer::Reduction).to receive(:call).and_return(result)
+
+      expect(described_class.write_mre(crash, variant, directory, reduce: true).to_s)
+        .to end_with('mre.sh (NoMethodError; reduced to 2 line(s) from 412; 4 call(s), 2.1s)')
     end
   end
 end

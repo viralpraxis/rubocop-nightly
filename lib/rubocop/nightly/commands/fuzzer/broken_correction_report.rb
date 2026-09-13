@@ -13,18 +13,18 @@ module RuboCop
         module BrokenCorrectionReport
           module_function
 
+          # Returns where the example landed, for the caller to report on the same line as the
+          # finding itself; a failure comes back as a reason rather than a log line of its own.
           def write(finding, corrected_path, directory)
+            return Mre.failed('corrected source unavailable') unless corrected_path
+
             target = directory.join('mre', slug(finding))
             FileUtils.mkdir_p(target)
-
             FileUtils.copy_file(corrected_path, target.join('corrected.rb'))
-            Reproduction.write_script(target, command(finding, directory))
 
-            RuboCop::Nightly.logger.info(
-              "Wrote broken-correction MRE for #{finding.path} -> #{target.join('mre.sh')}"
-            )
+            Mre.written(Reproduction.write_script(target, command(finding, directory)), directory)
           rescue StandardError => e
-            RuboCop::Nightly.logger.warn("Could not write MRE for #{finding.path}: #{e.class}: #{e.message}")
+            Mre.failed("#{e.class}: #{e.message}")
           end
 
           def slug(finding)

@@ -36,7 +36,8 @@ module RuboCop
           :log_level,
           :reduce,
           :autocorrect,
-          :plugins
+          :plugins,
+          :only_show_types
         ) do
           def initialize( # rubocop:disable Metrics/ParameterLists
             source:,
@@ -48,7 +49,8 @@ module RuboCop
             log_level: 'INFO',
             reduce: false,
             autocorrect: false,
-            plugins: true
+            plugins: true,
+            only_show_types: nil
           )
             super
           end
@@ -63,7 +65,7 @@ module RuboCop
           end
 
           def executor_options
-            { batch_size:, batch_timeout:, log_level:, reduce:, autocorrect:, plugins: }
+            { batch_size:, batch_timeout:, log_level:, reduce:, autocorrect:, plugins:, only_show_types: }
           end
 
           def command = :fuzzer
@@ -96,7 +98,11 @@ module RuboCop
           ['-A', '--[no-]autocorrect', 'Exercise the correction path too, against throwaway copies ' \
                                        'of the corpus (off by default)', :autocorrect, nil],
           ['-p', '--[no-]plugins', 'Fuzz the extension cops as well as the core ones (on by default); ' \
-                                   '--no-plugins confines the run to RuboCop itself', :plugins, nil]
+                                   '--no-plugins confines the run to RuboCop itself', :plugins, nil],
+          ['-T TYPES', '--only-show-types TYPES',
+           'Report only these issue types, comma separated ' \
+           "(#{Commands::Fuzzer::Findings::ISSUE_TYPES.join(', ')}); every type is still counted, " \
+           'so the exit status does not change', :only_show_types_list, nil]
         ].freeze
         private_constant :FUZZER_SWITCHES
 
@@ -196,6 +202,7 @@ module RuboCop
             validate_batch_timeout!(arguments)
             validate_rubygems_limit!(arguments)
             validate_log_level!(arguments)
+            validate_only_show_types!(arguments)
           end
 
           def validate_batch_size!(arguments)
@@ -224,6 +231,27 @@ module RuboCop
             return if LOG_LEVELS.include?(log_level.to_s.upcase)
 
             raise UsageError, "unknown --log-level #{log_level.inspect}, expected one of #{LOG_LEVELS.join(', ')}"
+          end
+
+          # Filtering the report down to nothing is always a mistake rather than an intention, so
+          # an empty list is rejected rather than quietly silencing the whole run.
+          def validate_only_show_types!(arguments)
+            raw = arguments.delete(:only_show_types_list)
+            return if raw.nil?
+
+            known = Commands::Fuzzer::Findings::ISSUE_TYPES
+            types = raw.split(',').map(&:strip).reject(&:empty?)
+
+            raise UsageError, "--only-show-types needs at least one type: #{known.join(', ')}" if types.empty?
+
+            reject_unknown_types!(types - known, known)
+            arguments[:only_show_types] = types
+          end
+
+          def reject_unknown_types!(unknown, known)
+            return if unknown.empty?
+
+            raise UsageError, "unknown issue type(s) #{unknown.join(', ')}, expected #{known.join(', ')}"
           end
 
           def validate_mirror_specific_arguments!(arguments)

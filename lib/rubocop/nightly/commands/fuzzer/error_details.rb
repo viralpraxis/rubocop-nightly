@@ -12,6 +12,11 @@ module RuboCop
         SOURCE_LOCATION = /:(?<line>\d+):(?<column>\d+)\z/
 
         ErrorDetails = Data.define(:cop_name, :source_pointer) do
+          # How the line this ends up on is tagged. The other two kinds carry their own — between
+          # them, `exception`, `broken-correction` and `infinite-loop` name every defect a run
+          # reports, so a log can be filtered down to one kind of bug without parsing prose.
+          def issue_type = 'exception'
+
           def path = source_pointer.sub(SOURCE_LOCATION, '')
 
           def line = source_pointer[SOURCE_LOCATION, 1]&.to_i

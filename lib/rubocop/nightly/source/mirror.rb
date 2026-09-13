@@ -8,19 +8,15 @@ module RuboCop
           @mirror_path = mirror_path
         end
 
+        # Whatever the path names is handed over as it stands. `Corpus` already walks a directory
+        # recursively and keeps only the Ruby files out of it, so selecting here can only lose
+        # things: this used to descend one level and keep the directories alone, which analysed
+        # nothing at all when the path held loose `.rb` files rather than one directory per gem.
         def fetch
-          # `Dir.glob` already yields complete paths; only `Dir.children` needs the prefix
-          # joined back on. Joining both was producing `<pattern><absolute-path>` strings
-          # that could never exist.
-          paths =
-            if mirror_path.include?('*')
-              Dir.glob(mirror_path)
-            else
-              ensure_directory!
-              Dir.children(mirror_path).map { File.join(mirror_path, it) }
-            end
+          return Dir.glob(mirror_path) if mirror_path.include?('*')
 
-          paths.select { File.directory?(it) }.sort
+          ensure_directory!
+          [mirror_path]
         end
 
         private

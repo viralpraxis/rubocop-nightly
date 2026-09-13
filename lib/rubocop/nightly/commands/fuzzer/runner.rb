@@ -34,7 +34,8 @@ module RuboCop
           # reported again in every subsequent one.
           def initialize( # rubocop:disable Metrics/ParameterLists
             target_paths, configuration: nil, timeout: nil,
-            findings: Findings.new, reduce: false, autocorrect: false, plugins: true
+            findings: Findings.new, reduce: false, autocorrect: false, plugins: true,
+            only_show_types: nil
           )
             super()
 
@@ -45,6 +46,7 @@ module RuboCop
             @findings = findings
             @reduce = reduce
             @autocorrect = autocorrect
+            @only_show_types = only_show_types
           end
 
           def run
@@ -64,7 +66,8 @@ module RuboCop
 
           private
 
-          attr_reader :target_paths, :configuration, :findings, :reduce, :autocorrect, :plugins
+          attr_reader :target_paths, :configuration, :findings, :reduce, :autocorrect, :plugins,
+                      :only_show_types
 
           def run_variant(configuration_variant, index, configuration_path, deadline)
             File.write(configuration_path, configuration_variant.to_yaml)
@@ -85,7 +88,7 @@ module RuboCop
           end
 
           def reporter
-            @reporter ||= Reporter.new(findings:, target_paths:, reduce:, autocorrect:)
+            @reporter ||= Reporter.new(findings:, target_paths:, reduce:, autocorrect:, only_show_types:)
           end
 
           def invoke_rubocop(configuration_path, paths, timeout)

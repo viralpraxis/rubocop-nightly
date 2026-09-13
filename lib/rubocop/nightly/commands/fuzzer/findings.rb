@@ -12,6 +12,11 @@ module RuboCop
         # reading but is not on its own a reason to fail the night, so only the first three move
         # the exit status.
         class Findings
+          # The tag every defect line is prefixed with, and the vocabulary `--only-show-types`
+          # accepts. Each kind answers `issue_type` with one of these; a spec pins the two
+          # together so the switch cannot start rejecting a type that is still being reported.
+          ISSUE_TYPES = %w[exception broken-correction infinite-loop].freeze
+
           # `origin` is the emitting file with its Bundler revision hash masked out, so that the
           # same warning from two checkouts of the same gem is recognised as one warning.
           Warning = Data.define(:origin, :message) do
@@ -22,10 +27,14 @@ module RuboCop
           # actually pointed at: those live in a directory that is gone by the time anyone reads
           # the report, and they differ on every run, which would defeat deduplication as well.
           CorrectionLoop = Data.define(:path, :cop_names) do
+            def issue_type = 'infinite-loop'
+
             def to_s = "#{path} (#{cop_names})"
           end
 
           BrokenCorrection = Data.define(:path, :diagnostic) do
+            def issue_type = 'broken-correction'
+
             def to_s = "#{path}: #{diagnostic}"
           end
 

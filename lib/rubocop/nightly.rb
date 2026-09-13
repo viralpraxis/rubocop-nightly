@@ -15,6 +15,10 @@ require_relative 'nightly/runner/base'
 require_relative 'nightly/runtime'
 require_relative 'nightly/runtime/plugin_registry'
 
+# Ahead of the CLI: `Parser` names the issue types in its `--only-show-types` help text, so the
+# vocabulary has to exist before that file is read.
+require_relative 'nightly/commands/fuzzer/findings'
+
 require_relative 'nightly/cli'
 require_relative 'nightly/cli/parser'
 
@@ -38,7 +42,7 @@ require_relative 'nightly/commands/compare/report'
 require_relative 'nightly/commands/compare/runner'
 
 require_relative 'nightly/commands/fuzzer/error_details'
-require_relative 'nightly/commands/fuzzer/findings'
+require_relative 'nightly/commands/fuzzer/mre'
 require_relative 'nightly/commands/fuzzer/diagnostics'
 require_relative 'nightly/commands/fuzzer/broken_correction_report'
 require_relative 'nightly/commands/fuzzer/reporter'
@@ -59,7 +63,7 @@ module RuboCop
       def logger
         @logger ||= Logger.new($stderr) # rubocop:disable ThreadSafety/ClassInstanceVariable
                           .tap { it.progname = 'rubocop-nightly' }
-                          .tap { it.formatter = proc { |severity, _time, _progname, msg| "[#{severity}]: #{msg}\n" } }
+                          .tap { it.formatter = proc { |severity, _time, _progname, msg| "#{severity}: #{msg}\n" } }
       end
     end
   end

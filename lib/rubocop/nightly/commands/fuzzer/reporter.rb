@@ -11,11 +11,12 @@ module RuboCop
         # cop shows up in hundreds of corpus files, and reporting it once per file buries the
         # nineteen other bugs the same night found.
         class Reporter
-          def initialize(findings:, target_paths:, reduce: false, autocorrect: false)
+          def initialize(findings:, target_paths:, reduce: false, autocorrect: false, only_show_types: nil)
             @findings = findings
             @target_paths = target_paths
             @reduce = reduce
             @autocorrect = autocorrect
+            @only_show_types = only_show_types
           end
 
           def call(diagnostics, workspace, outcome)
@@ -27,7 +28,13 @@ module RuboCop
 
           private
 
-          attr_reader :findings, :target_paths, :reduce, :autocorrect
+          attr_reader :findings, :target_paths, :reduce, :autocorrect, :only_show_types
+
+          # `--only-show-types` narrows the report, not the run: everything is still collected,
+          # still deduplicated and still counted in the summary, so hiding a kind cannot quietly
+          # turn a failing night green. The evidence is written either way, so widening the filter
+          # on the next run does not mean re-fuzzing to get it back.
+          def show?(finding) = only_show_types.nil? || only_show_types.include?(finding.issue_type)
 
           # The reproduction is persisted once for the whole variant, and only when it has
           # something new to say — it carries a copy of the configuration that produced it, which
@@ -41,21 +48,28 @@ module RuboCop
             unreported.each { report_error(it, outcome, reproduction_path) }
           end
 
+          # The example is written before the line is logged, rather than after, so that the two
+          # can share it. With `--reduce` that delays the line by however long shrinking takes.
           def report_error(error_detail, outcome, reproduction_path)
             findings.cop_errors.add(error_detail)
-            RuboCop::Nightly.logger.error(
-              "[#{reproduction_path}] #{error_detail.cop_name}: #{error_detail.source_pointer}"
-            )
             # Every crash gets an MRE. `--reduce` only decides whether it is minimised first;
             # without it the example simply runs RuboCop against the whole offending file.
-            Reproduction.write_mre(error_detail, outcome.variant, reproduction_path, reduce:, autocorrect:)
+            mre = Reproduction.write_mre(error_detail, outcome.variant, reproduction_path, reduce:, autocorrect:)
+
+            return unless show?(error_detail)
+
+            RuboCop::Nightly.logger.error(
+              "[#{error_detail.issue_type}] [#{reproduction_path}] " \
+              "#{error_detail.cop_name}: #{error_detail.source_pointer} -> #{mre}"
+            )
           end
 
           def report_correction_loops(correction_loops)
             correction_loops.each do |correction_loop|
               next unless findings.correction_loops.add?(correction_loop)
+              next unless show?(correction_loop)
 
-              RuboCop::Nightly.logger.error("Infinite correction loop: #{correction_loop}")
+              RuboCop::Nightly.logger.error("[#{correction_loop.issue_type}] #{correction_loop}")
             end
           end
 
@@ -89,14 +103,15 @@ module RuboCop
 
           def report_broken_correction(broken_correction, corrected, reproduction_path)
             findings.broken_corrections.add(broken_correction)
-            RuboCop::Nightly.logger.error(
-              "[#{reproduction_path}] Autocorrect produced unparseable source: #{broken_correction}"
+            mre = BrokenCorrectionReport.write(
+              broken_correction, corrected[broken_correction.path], reproduction_path
             )
 
-            corrected_path = corrected[broken_correction.path]
-            return unless corrected_path
+            return unless show?(broken_correction)
 
-            BrokenCorrectionReport.write(broken_correction, corrected_path, reproduction_path)
+            RuboCop::Nightly.logger.error(
+              "[#{broken_correction.issue_type}] [#{reproduction_path}] #{broken_correction} -> #{mre}"
+            )
           end
         end
       end

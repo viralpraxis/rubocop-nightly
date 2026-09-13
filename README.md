@@ -97,7 +97,8 @@ After setting up, you can run regression tests on Ruby code fetched from one of 
 3. `mirror` (*experimental*)
 
    Analyze a local mirror maintained with [`rubygems-mirror`](https://github.com/rubygems/rubygems-mirror).
-   The path may be a directory or a glob; either way only directories are analyzed.
+   The path may be a directory or a glob. A directory is walked recursively, so it works just as
+   well against an ordinary source tree as against a mirror holding one directory per gem.
 
    Example:
 
@@ -130,7 +131,7 @@ All sources support the following CLI options:
 
    After a crash is detected, shrink it to a minimal reproducible example: the offending cop
    alone, a few lines of configuration, and the smallest source that still triggers it. Writes
-   `repro.rb`, `repro.yml` and a runnable `repro.sh` next to the raw reproduction.
+   `mre.rb`, `mre.yml` and a runnable `mre.sh` next to the raw reproduction.
 
    It costs a handful of extra RuboCop invocations per distinct crash (typically 2–6, a few
    seconds), but a large input can take considerably longer, so it is opt-in. Use `--no-reduce`
@@ -170,6 +171,19 @@ All sources support the following CLI options:
    The nightly workflows pass `--no-plugins` by default. Dispatch them with `plugins: true` to
    put the extensions back for a one-off run.
 
+- `--only-show-types` (default: every type)
+
+   Report only the named issue types, comma separated:
+
+   ```console
+   bin/rubocop-nightly fuzzer --source rubygems --autocorrect --only-show-types broken-correction
+   ```
+
+   This narrows the **report**, not the run. Every type is still collected, deduplicated and
+   counted in the closing summary, and every reproduction is still written to disk — so hiding a
+   kind cannot quietly turn a failing night green, and widening the filter next time does not mean
+   re-fuzzing to get the evidence back.
+
 - `--log-level` (default: `INFO`)
 
    One of `DEBUG`, `INFO`, `WARN`, `ERROR`, `FATAL`, `UNKNOWN`. Logs go to stderr, so the
@@ -185,6 +199,31 @@ the path, so one warning from two checkouts of a gem is not counted twice).
 
 They are reported but do **not** affect the exit status: they are worth reading, but a single
 noisy dependency should not be able to turn an otherwise clean night red.
+
+### Reading the log
+
+Each defect is reported on exactly one line, tagged with its issue type and ending in the example
+that reproduces it:
+
+```
+ERROR: [exception] [<reproduction directory>] Style/Thing: /path/bug.rb:2:1 -> mre/Style-Thing-1a2b3c4d/mre.sh (whole file)
+ERROR: [broken-correction] [<reproduction directory>] /path/x.rb: unexpected 'end' -> mre/broken-correction-x-5e6f7a8b/mre.sh
+ERROR: [infinite-loop] /path/y.rb (Layout/LineLength, Style/MutableConstant)
+```
+
+There are three issue types:
+
+| Type | Meaning |
+| --- | --- |
+| `exception` | a cop raised while inspecting or correcting |
+| `broken-correction` | `--autocorrect` turned source that parsed into source that does not |
+| `infinite-loop` | corrections never settled, so RuboCop gave up on the file |
+
+The script is named relative to the reproduction directory the same line already carries. Where
+`--reduce` ran, the trailing note carries the exception class and how far the source shrank; where
+no example could be written, the line ends with `-> no MRE: <reason>` instead.
+
+Ruby warnings are reported at `WARN` rather than `ERROR` and are not one of the issue types.
 
 ### Exit status
 
