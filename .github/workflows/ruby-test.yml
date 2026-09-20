@@ -17,6 +17,7 @@ jobs:
       matrix:
         ruby:
           - '4.0'
+          - 'head'
     env:
       XDG_DATA_HOME: ${{ github.workspace }}/.local/share
     steps:

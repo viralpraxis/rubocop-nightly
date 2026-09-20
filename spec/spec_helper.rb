@@ -21,7 +21,11 @@ RSpec.configure do |config|
   end
 
   config.before(:suite) do
-    system('bundle', 'exec', 'rake', 'gems:install', exception: true) if ENV.key?('CI')
+    next unless ENV.key?('CI')
+
+    Bundler.with_unbundled_env do
+      system('bundle', 'exec', 'rake', 'gems:install', exception: true)
+    end
   end
 
   config.before(:suite) { RuboCop::Nightly.logger.reopen(File::NULL) }
