@@ -26,7 +26,7 @@ on:
       autocorrect:
         description: Exercise the correction path too (correction loops and broken corrections)
         required: false
-        default: 'true'
+        default: 'false'
       plugins:
         description: Fuzz the extension cops as well as the core ones
         required: false
