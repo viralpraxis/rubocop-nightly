@@ -5,10 +5,10 @@ name: rubocop-nightly-latest
 # repositories, while this one sees whatever Ruby was actually pushed today.
 on:
   schedule:
-    # rubocop-nightly-popular starts at 02:17 UTC and runs for at most 6 hours,
+    # rubocop-nightly-popular starts at 19:17 UTC and runs for at most 6 hours,
     # so this one starts once that window has closed. The two also share a
     # concurrency group, which keeps them apart if that run overruns anyway.
-    - cron: '17 9 * * *'
+    - cron: '17 2 * * *'
   workflow_dispatch:
     inputs:
       gems_limit:
@@ -88,7 +88,7 @@ jobs:
           GEMS_LIMIT: ${{ inputs.gems_limit || '200' }}
           BATCH_SIZE: ${{ inputs.batch_size || '1000' }}
           BUDGET: ${{ inputs.time_budget_minutes || '345' }}
-          AUTOCORRECT_FLAG: ${{ inputs.autocorrect == 'false' && '--no-autocorrect' || '--autocorrect' }}
+          AUTOCORRECT_FLAG: ${{ inputs.autocorrect == 'true' && '--autocorrect' || '--no-autocorrect' }}
           PLUGINS_FLAG: ${{ inputs.plugins == 'true' && '--plugins' || '--no-plugins' }}
 
       - name: Collect artifacts

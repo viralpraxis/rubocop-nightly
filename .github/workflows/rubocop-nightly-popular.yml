@@ -2,7 +2,7 @@ name: rubocop-nightly-popular
 
 on:
   schedule:
-    - cron: '17 2 * * *'
+    - cron: '17 19 * * *'
   workflow_dispatch:
     inputs:
       git_sources:
@@ -129,7 +129,7 @@ jobs:
         env:
           BATCH_SIZE: ${{ inputs.batch_size || '1000' }}
           BUDGET: ${{ inputs.time_budget_minutes || '345' }}
-          AUTOCORRECT_FLAG: ${{ inputs.autocorrect == 'false' && '--no-autocorrect' || '--autocorrect' }}
+          AUTOCORRECT_FLAG: ${{ inputs.autocorrect == 'true' && '--autocorrect' || '--no-autocorrect' }}
           PLUGINS_FLAG: ${{ inputs.plugins == 'true' && '--plugins' || '--no-plugins' }}
 
       - name: Collect artifacts
