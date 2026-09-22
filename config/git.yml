@@ -27,3 +27,17 @@
   exclude:
     - spec/**/*
     - enc/trans/*-tbl.rb
+- url: https://github.com/Homebrew/brew.git
+  branch: main
+  exclude:
+    - "**/vendor/**/*"
+- url: https://github.com/metasploit/metasploit-framework.git
+  branch: master
+  exclude:
+    - "**/vendor/**/*"
+- url: https://github.com/fastlane/fastlane.git
+  branch: master
+- url: https://github.com/redmine/redmine.git
+  branch: master
+- url: https://github.com/opal/opal.git
+  branch: master
