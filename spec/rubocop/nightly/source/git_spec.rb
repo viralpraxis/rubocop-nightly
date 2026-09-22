@@ -7,6 +7,12 @@ RSpec.describe RuboCop::Nightly::Source::Git do
         .to raise_error(RuboCop::Nightly::ConfigurationError, /'url' key/)
     end
 
+    it 'rejects an exclude list that is not a list of globs' do
+      source = described_class.new(sources: [{ 'url' => 'https://example.com/x.git', 'exclude' => 'spec/**/*' }])
+
+      expect { source.fetch }.to raise_error(RuboCop::Nightly::ConfigurationError, /'exclude' must be a list/)
+    end
+
     it 'skips a repository it cannot clone rather than returning a path that does not exist' do
       allow(RuboCop::Nightly.logger).to receive(:error)
       source = described_class.new(sources: [{ 'url' => 'https://example.invalid/nope.git', 'branch' => 'main' }])
@@ -17,8 +23,9 @@ RSpec.describe RuboCop::Nightly::Source::Git do
 
   describe 'updating an existing checkout' do
     let(:root) { Pathname(Dir.mktmpdir('rubocop-nightly-git')) }
-    let(:source) { described_class.new(sources: [{ 'url' => 'https://example.com/x.git', 'branch' => branch }]) }
+    let(:source) { described_class.new(sources: [{ 'url' => 'https://example.com/x.git', 'branch' => branch }.merge(extra)]) }
     let(:branch) { 'main' }
+    let(:extra) { {} }
 
     before do
       stub_const("#{described_class}::DATA_DIRECTORY", root) if described_class.const_defined?(:DATA_DIRECTORY)
@@ -31,7 +38,19 @@ RSpec.describe RuboCop::Nightly::Source::Git do
       FileUtils.mkdir_p(checkout.join('.git'))
       allow(source).to receive(:system).and_return(true)
 
-      expect(source.fetch).to eq([checkout.to_s])
+      expect(source.fetch).to eq([RuboCop::Nightly::Source::Entry.new(path: checkout.to_s)])
+    end
+
+    context 'with an exclude list' do
+      let(:extra) { { 'exclude' => ['spec/**/*'] } }
+
+      it 'carries the globs over to the corpus entry' do
+        checkout = root.join('example.com_x')
+        FileUtils.mkdir_p(checkout.join('.git'))
+        allow(source).to receive(:system).and_return(true)
+
+        expect(source.fetch.map(&:exclude)).to eq([['spec/**/*']])
+      end
     end
 
     it 'warns and keeps the checkout when the fetch fails' do
@@ -53,7 +72,7 @@ RSpec.describe RuboCop::Nightly::Source::Git do
         FileUtils.mkdir_p(checkout.join('.git'))
         allow(source).to receive(:system).and_return(true)
 
-        expect(source.fetch).to eq([checkout.to_s])
+        expect(source.fetch).to eq([RuboCop::Nightly::Source::Entry.new(path: checkout.to_s)])
       end
     end
   end

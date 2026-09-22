@@ -17,7 +17,8 @@ module RuboCop
       ].to_set.freeze
 
       def initialize(entries)
-        @entries = Array(entries)
+        @entries = Array(entries).map { it.is_a?(Source::Entry) ? it : Source::Entry.new(path: it) }
+        @excluded = 0
       end
 
       def files
@@ -35,15 +36,25 @@ module RuboCop
       attr_reader :entries
 
       def expand
-        entries.flat_map do |entry|
-          if File.directory?(entry)
-            Dir.glob(File.join(entry, '**', '*'), File::FNM_DOTMATCH).select { ruby_file?(it) }
-          elsif ruby_file?(entry)
-            [entry]
-          else
-            []
-          end
-        end.sort
+        entries.flat_map { expand_entry(it) }.sort
+      end
+
+      def expand_entry(entry)
+        candidates = candidates_for(entry)
+        kept = candidates.reject { entry.excludes?(it) }
+        @excluded += candidates.size - kept.size
+
+        kept
+      end
+
+      def candidates_for(entry)
+        if File.directory?(entry.path)
+          Dir.glob(File.join(entry.path, '**', '*'), File::FNM_DOTMATCH).select { ruby_file?(it) }
+        elsif ruby_file?(entry.path)
+          [entry.path]
+        else
+          []
+        end
       end
 
       def ruby_file?(path)
@@ -65,6 +76,8 @@ module RuboCop
       end
 
       def report(total, unique)
+        report_exclusions
+
         return if total.zero?
 
         duplicates = total - unique
@@ -73,6 +86,12 @@ module RuboCop
         RuboCop::Nightly.logger.info(
           "Corpus: #{unique} distinct Ruby files from #{total} (#{duplicates} duplicates, #{share}% skipped)"
         )
+      end
+
+      def report_exclusions
+        return unless @excluded.positive?
+
+        RuboCop::Nightly.logger.info("Corpus: #{@excluded} file(s) left out by source exclusions")
       end
     end
   end
