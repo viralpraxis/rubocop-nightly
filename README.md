@@ -94,6 +94,19 @@ After setting up, you can run regression tests on Ruby code fetched from one of 
    Repositories are shallow-cloned on first use and fast-forwarded to the current branch
    tip on subsequent runs.
 
+   An entry may carry an `exclude` list of globs, matched against paths relative to the
+   repository root, to keep part of a checkout out of the corpus:
+
+   ```yaml
+   - url: https://github.com/ruby/ruby.git
+     branch: master
+     exclude:
+       - spec/**/*
+       - enc/trans/*-tbl.rb
+   ```
+
+   A glob naming a directory (`spec`, `spec/**/*`) excludes everything below it.
+
 3. `mirror` (*experimental*)
 
    Analyze a local mirror maintained with [`rubygems-mirror`](https://github.com/rubygems/rubygems-mirror).

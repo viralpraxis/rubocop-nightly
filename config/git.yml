@@ -22,3 +22,8 @@
   branch: main
 - url: https://github.com/ruby/prism.git
   branch: main
+- url: https://github.com/ruby/ruby.git
+  branch: master
+  exclude:
+    - spec/**/*
+    - enc/trans/*-tbl.rb

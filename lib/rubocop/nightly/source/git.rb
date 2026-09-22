@@ -19,13 +19,24 @@ module RuboCop
               raise ConfigurationError, "git source entry must be a mapping with a 'url' key, got #{source.inspect}"
             end
 
-            process_git_source(git_url: source.fetch('url'), branch: source.fetch('branch', nil))
+            exclude = exclude_for(source)
+            path = process_git_source(git_url: source.fetch('url'), branch: source.fetch('branch', nil))
+
+            path && Entry.new(path:, exclude:)
           end
         end
 
         private
 
         attr_reader :sources
+
+        def exclude_for(source)
+          exclude = source.fetch('exclude', [])
+          return exclude if exclude.is_a?(Array) && exclude.all?(String)
+
+          raise ConfigurationError,
+                "git source 'exclude' must be a list of glob patterns, got #{exclude.inspect}"
+        end
 
         # Nightly runs are worthless against a snapshot frozen on the day of the first clone,
         # so an existing checkout is fast-forwarded to the current branch tip.

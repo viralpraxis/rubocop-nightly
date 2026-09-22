@@ -64,6 +64,41 @@ RSpec.describe RuboCop::Nightly::Corpus do
       expect(described_class.new(nil).files).to be_empty
     end
 
+    it 'leaves out files matched by a source exclusion' do
+      kept = write('lib/a.rb', 'a')
+      write('spec/ruby/core/b_spec.rb', 'b')
+      write('enc/trans/gb18030-tbl.rb', 'c')
+      entry = RuboCop::Nightly::Source::Entry.new(path: root, exclude: ['spec/**/*', 'enc/trans/*-tbl.rb'])
+
+      expect(described_class.new([entry]).files).to contain_exactly(kept)
+    end
+
+    it 'keeps files the exclusions do not match' do
+      kept = write('enc/trans/single_byte.rb', 'a')
+      entry = RuboCop::Nightly::Source::Entry.new(path: root, exclude: ['enc/trans/*-tbl.rb'])
+
+      expect(described_class.new([entry]).files).to contain_exactly(kept)
+    end
+
+    it 'excludes a whole directory named without a glob' do
+      kept = write('lib/a.rb', 'a')
+      write('spec/nested/b.rb', 'b')
+      entry = RuboCop::Nightly::Source::Entry.new(path: root, exclude: ['spec'])
+
+      expect(described_class.new([entry]).files).to contain_exactly(kept)
+    end
+
+    it 'reports what the exclusions left out' do
+      allow(RuboCop::Nightly.logger).to receive(:info)
+      write('lib/a.rb', 'a')
+      write('spec/b.rb', 'b')
+      entry = RuboCop::Nightly::Source::Entry.new(path: root, exclude: ['spec/**/*'])
+
+      described_class.new([entry]).files
+
+      expect(RuboCop::Nightly.logger).to have_received(:info).with(/1 file\(s\) left out by source exclusions/)
+    end
+
     it 'reports the reduction' do
       allow(RuboCop::Nightly.logger).to receive(:info)
       write('x86/thing.rb', 'identical')

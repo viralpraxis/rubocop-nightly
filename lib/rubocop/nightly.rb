@@ -22,6 +22,8 @@ require_relative 'nightly/commands/fuzzer/findings'
 require_relative 'nightly/cli'
 require_relative 'nightly/cli/parser'
 
+require_relative 'nightly/source/entry'
+
 require_relative 'nightly/corpus'
 require_relative 'nightly/executor'
 require_relative 'nightly/configuration'
