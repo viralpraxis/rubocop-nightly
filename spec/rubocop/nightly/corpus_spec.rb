@@ -99,6 +99,30 @@ RSpec.describe RuboCop::Nightly::Corpus do
       expect(RuboCop::Nightly.logger).to have_received(:info).with(/1 file\(s\) left out by source exclusions/)
     end
 
+    it 'leaves out files it cannot read' do
+      kept = write('lib/a.rb', 'a')
+      FileUtils.chmod(0o000, write('lib/b.rb', 'b'))
+
+      expect(described_class.new([root]).files).to contain_exactly(kept)
+    end
+
+    it 'leaves out an unreadable file given as a plain entry' do
+      unreadable = write('lib/a.rb', 'a')
+      FileUtils.chmod(0o000, unreadable)
+
+      expect(described_class.new([unreadable]).files).to be_empty
+    end
+
+    it 'reports what it could not read' do
+      allow(RuboCop::Nightly.logger).to receive(:info)
+      write('lib/a.rb', 'a')
+      FileUtils.chmod(0o000, write('lib/b.rb', 'b'))
+
+      described_class.new([root]).files
+
+      expect(RuboCop::Nightly.logger).to have_received(:info).with(/1 unreadable file\(s\) left out/)
+    end
+
     it 'reports the reduction' do
       allow(RuboCop::Nightly.logger).to receive(:info)
       write('x86/thing.rb', 'identical')

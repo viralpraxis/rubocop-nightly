@@ -19,6 +19,7 @@ module RuboCop
       def initialize(entries)
         @entries = Array(entries).map { it.is_a?(Source::Entry) ? it : Source::Entry.new(path: it) }
         @excluded = 0
+        @unreadable = 0
       end
 
       def files
@@ -44,7 +45,7 @@ module RuboCop
         kept = candidates.reject { entry.excludes?(it) }
         @excluded += candidates.size - kept.size
 
-        kept
+        kept.select { readable?(it) }
       end
 
       def candidates_for(entry)
@@ -55,6 +56,13 @@ module RuboCop
         else
           []
         end
+      end
+
+      def readable?(path)
+        return true if File.readable?(path)
+
+        @unreadable += 1
+        false
       end
 
       def ruby_file?(path)
@@ -77,6 +85,7 @@ module RuboCop
 
       def report(total, unique)
         report_exclusions
+        report_unreadable
 
         return if total.zero?
 
@@ -92,6 +101,12 @@ module RuboCop
         return unless @excluded.positive?
 
         RuboCop::Nightly.logger.info("Corpus: #{@excluded} file(s) left out by source exclusions")
+      end
+
+      def report_unreadable
+        return unless @unreadable.positive?
+
+        RuboCop::Nightly.logger.info("Corpus: #{@unreadable} unreadable file(s) left out")
       end
     end
   end
