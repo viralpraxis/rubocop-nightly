@@ -11,8 +11,10 @@ RSpec.describe RuboCop::Nightly::Executor do
   after { FileUtils.remove_entry(root) }
 
   before do
-    allow(RuboCop::Nightly::Commands::Fuzzer::Runner)
-      .to receive_messages(new: runner, build_configuration: :configuration)
+    allow(RuboCop::Nightly::Commands::Fuzzer::Runner).to receive(:new).and_return(runner)
+    allow(RuboCop::Nightly::Commands::Fuzzer::Configurations).to receive(:build) do |target_ruby_version:, **|
+      instance_double(RuboCop::Nightly::Configuration, target_ruby_version: target_ruby_version)
+    end
   end
 
   def build(**options) = described_class.new(source, { log_level: 'FATAL' }.merge(options))
@@ -38,7 +40,7 @@ RSpec.describe RuboCop::Nightly::Executor do
     it 'builds the configuration once for the whole run' do
       build(batch_size: 1).call
 
-      expect(RuboCop::Nightly::Commands::Fuzzer::Runner).to have_received(:build_configuration).once
+      expect(RuboCop::Nightly::Commands::Fuzzer::Configurations).to have_received(:build).once
     end
 
     it 'shares one error set across batches so a crash is reported once', :aggregate_failures do
@@ -107,6 +109,56 @@ RSpec.describe RuboCop::Nightly::Executor do
         end
 
         expect(executor.call).not_to be_success
+      end
+    end
+
+    describe 'target ruby versions' do
+      it 'makes one pass over the corpus per requested version' do
+        build(batch_size: 3, target_ruby_versions: [2.7, 3.0]).call
+
+        expect(RuboCop::Nightly::Commands::Fuzzer::Runner).to have_received(:new).twice
+      end
+
+      it 'runs each batch against each version' do
+        build(batch_size: 1, target_ruby_versions: [2.7, 3.0]).call
+
+        expect(RuboCop::Nightly::Commands::Fuzzer::Runner).to have_received(:new).exactly(6).times
+      end
+
+      it 'hands every pass the configuration built for it', :aggregate_failures do
+        build(batch_size: 3, target_ruby_versions: [2.7, 3.0]).call
+
+        versions = []
+        expect(RuboCop::Nightly::Commands::Fuzzer::Runner).to have_received(:new).twice do |_, **kwargs|
+          versions << kwargs[:configuration].target_ruby_version
+        end
+        expect(versions).to eq([2.7, 3.0])
+      end
+
+      it 'shares one findings set across the passes', :aggregate_failures do
+        build(batch_size: 3, target_ruby_versions: [2.7, 3.0]).call
+
+        sets = []
+        expect(RuboCop::Nightly::Commands::Fuzzer::Runner).to have_received(:new).twice do |_, **kwargs|
+          sets << kwargs[:findings]
+        end
+        expect(sets.uniq(&:object_id).size).to eq(1)
+      end
+
+      it 'builds one configuration per pass rather than all of them up front' do
+        build(batch_size: 1, target_ruby_versions: [2.7, 3.0]).call
+
+        expect(RuboCop::Nightly::Commands::Fuzzer::Configurations).to have_received(:build).twice
+      end
+
+      it 'resolves what the run was asked for' do
+        allow(RuboCop::Nightly::Commands::Fuzzer::Configurations)
+          .to receive(:target_ruby_versions).and_return([3.4])
+
+        build(target_ruby_versions: :all).call
+
+        expect(RuboCop::Nightly::Commands::Fuzzer::Configurations)
+          .to have_received(:target_ruby_versions).with(:all)
       end
     end
 

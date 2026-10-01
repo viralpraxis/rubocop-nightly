@@ -184,6 +184,36 @@ All sources support the following CLI options:
    The nightly workflows pass `--no-plugins` by default. Dispatch them with `plugins: true` to
    put the extensions back for a one-off run.
 
+- `--target-ruby-versions` (default: one pass, at the newest version both ends understand)
+
+   Make one full pass over the corpus per `AllCops: TargetRubyVersion`, comma separated, or
+   `all` for every version the RuboCop under test accepts:
+
+   ```console
+   bin/rubocop-nightly fuzzer --source rubygems --target-ruby-versions 2.7,3.0
+   ```
+
+   The target version is a configuration axis like any other, and the one the generated variants
+   cannot reach on their own. **67** of RuboCop's own cops branch on it: `Style/HashSyntax` only
+   offers the value shorthand from 3.1, `Style/ArgumentsForwarding` changes shape at 3.0, 3.2 and
+   again at 3.4. A single-version run never executes the other side of any of those branches.
+   Without the switch the fuzzer keeps making the one pass it always has, at the newest version
+   the driven RuboCop and the interpreter both understand.
+
+   Each pass costs a full traversal of the corpus, so `n` versions is `n` times the wall clock;
+   `all` is currently 15 passes. Findings are deduplicated across passes, so a defect that
+   reproduces under several versions is reported once, against the first version that reached
+   it — and that version is what its `mre.yml` pins, so the example reproduces.
+
+   A named-version run leaves `AllCops: ParserEngine` at `default` rather than pinning
+   `parser_prism` as the single-version run does. Prism refuses any target below 3.3, so pinning
+   it would abort every batch of a `2.7` pass on the configuration rather than running it. At
+   `default` RuboCop reaches for Prism wherever Prism can parse the target and for the Parser
+   gem below that.
+
+   Versions are given as `MAJOR.MINOR`. One the driven RuboCop does not know fails the run up
+   front, before the corpus is fetched, rather than aborting every batch of its pass.
+
 - `--only-show-types` (default: every type)
 
    Report only the named issue types, comma separated:

@@ -12,6 +12,8 @@ module RuboCop
       class Parser # rubocop:disable Metrics/ClassLength
         BATCH_SIZE_DEFAULT = 1000
         LOG_LEVELS = %w[DEBUG INFO WARN ERROR FATAL UNKNOWN].freeze
+        TARGET_RUBY_VERSIONS_ALL = 'all'
+        TARGET_RUBY_VERSION_PATTERN = /\A\d+\.\d+\z/
         HELP_FLAGS = %w[help --help -h].freeze
         VERSION_FLAGS = %w[version --version -v].freeze
         BANNER = <<~BANNER
@@ -37,7 +39,8 @@ module RuboCop
           :reduce,
           :autocorrect,
           :plugins,
-          :only_show_types
+          :only_show_types,
+          :target_ruby_versions
         ) do
           def initialize( # rubocop:disable Metrics/ParameterLists
             source:,
@@ -50,7 +53,8 @@ module RuboCop
             reduce: false,
             autocorrect: false,
             plugins: true,
-            only_show_types: nil
+            only_show_types: nil,
+            target_ruby_versions: nil
           )
             super
           end
@@ -65,7 +69,10 @@ module RuboCop
           end
 
           def executor_options
-            { batch_size:, batch_timeout:, log_level:, reduce:, autocorrect:, plugins:, only_show_types: }
+            {
+              batch_size:, batch_timeout:, log_level:, reduce:, autocorrect:, plugins:, only_show_types:,
+              target_ruby_versions:
+            }
           end
 
           def command = :fuzzer
@@ -99,6 +106,10 @@ module RuboCop
                                        'of the corpus (off by default)', :autocorrect, nil],
           ['-p', '--[no-]plugins', 'Fuzz the extension cops as well as the core ones (on by default); ' \
                                    '--no-plugins confines the run to RuboCop itself', :plugins, nil],
+          ['-r VERSIONS', '--target-ruby-versions VERSIONS',
+           'Make one pass per `AllCops: TargetRubyVersion`, comma separated (for example ' \
+           "`2.7,3.0`), or `#{TARGET_RUBY_VERSIONS_ALL}` for every version the RuboCop under " \
+           'test supports', :target_ruby_versions_list, nil],
           ['-T TYPES', '--only-show-types TYPES',
            'Report only these issue types, comma separated ' \
            "(#{Commands::Fuzzer::Findings::ISSUE_TYPES.join(', ')}); every type is still counted, " \
@@ -191,18 +202,21 @@ module RuboCop
           end
 
           def validate_fuzzer_arguments!(arguments)
-            source = arguments[:source]
-            raise UsageError, 'missing argument: --source' if source.nil? || source.empty?
-
-            unless Source.names.include?(source)
-              raise UsageError, "unknown source #{source.inspect}, expected one of #{Source.names.join(', ')}"
-            end
-
+            validate_source!(arguments)
             validate_batch_size!(arguments)
             validate_batch_timeout!(arguments)
             validate_rubygems_limit!(arguments)
             validate_log_level!(arguments)
             validate_only_show_types!(arguments)
+            validate_target_ruby_versions!(arguments)
+          end
+
+          def validate_source!(arguments)
+            source = arguments[:source]
+            raise UsageError, 'missing argument: --source' if source.nil? || source.empty?
+            return if Source.names.include?(source)
+
+            raise UsageError, "unknown source #{source.inspect}, expected one of #{Source.names.join(', ')}"
           end
 
           def validate_batch_size!(arguments)
@@ -246,6 +260,34 @@ module RuboCop
 
             reject_unknown_types!(types - known, known)
             arguments[:only_show_types] = types
+          end
+
+          def validate_target_ruby_versions!(arguments)
+            raw = arguments.delete(:target_ruby_versions_list)
+            return if raw.nil?
+
+            arguments[:target_ruby_versions] =
+              raw.strip == TARGET_RUBY_VERSIONS_ALL ? :all : parsed_target_ruby_versions(raw)
+          end
+
+          def parsed_target_ruby_versions(raw)
+            versions = raw.split(',').map(&:strip).reject(&:empty?)
+            reject_unusable_versions!(versions)
+
+            versions.map(&:to_f).uniq
+          end
+
+          def reject_unusable_versions!(versions)
+            if versions.empty?
+              raise UsageError, '--target-ruby-versions needs at least one `MAJOR.MINOR` version, ' \
+                                "or `#{TARGET_RUBY_VERSIONS_ALL}`"
+            end
+
+            malformed = versions.grep_v(TARGET_RUBY_VERSION_PATTERN)
+            return if malformed.empty?
+
+            raise UsageError, "unparsable target ruby version(s) #{malformed.join(', ')}, " \
+                              "expected `MAJOR.MINOR` or `#{TARGET_RUBY_VERSIONS_ALL}`"
           end
 
           def reject_unknown_types!(unknown, known)

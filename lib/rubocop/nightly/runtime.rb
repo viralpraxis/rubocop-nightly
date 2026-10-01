@@ -91,10 +91,19 @@ module RuboCop
         # entirely, and `compare` deliberately drives arbitrary old revisions.
         def target_ruby_version(bundle_gemfile: Pathname(Dir.pwd).join('Gemfile'))
           current = RUBY_VERSION.split('.').first(2).join('.').to_f
-          supported = supported_target_ruby_versions(bundle_gemfile)
+          supported = supported_target_ruby_versions(bundle_gemfile: bundle_gemfile)
           return current if supported.empty?
 
           supported.select { it <= current }.max || supported.min
+        end
+
+        # Memoised per Gemfile: the probe is a subprocess, and a single run builds several
+        # configurations against the same bundle.
+        def supported_target_ruby_versions(bundle_gemfile: Pathname(Dir.pwd).join('Gemfile'))
+          # rubocop:disable ThreadSafety/ClassInstanceVariable
+          @supported_target_ruby_versions ||= {}
+          @supported_target_ruby_versions[bundle_gemfile.to_s] ||= probe_target_ruby_versions(bundle_gemfile)
+          # rubocop:enable ThreadSafety/ClassInstanceVariable
         end
 
         def gems_data_directory = data_directory.join('rubocop-gems').freeze
@@ -120,15 +129,6 @@ module RuboCop
           puts versions.join(',')
         RUBY
         private_constant :PROBE
-
-        # Memoised per Gemfile: the probe is a subprocess, and a single run builds several
-        # configurations against the same bundle.
-        def supported_target_ruby_versions(bundle_gemfile)
-          # rubocop:disable ThreadSafety/ClassInstanceVariable
-          @supported_target_ruby_versions ||= {}
-          @supported_target_ruby_versions[bundle_gemfile.to_s] ||= probe_target_ruby_versions(bundle_gemfile)
-          # rubocop:enable ThreadSafety/ClassInstanceVariable
-        end
 
         def probe_target_ruby_versions(bundle_gemfile)
           stdout, _stderr, status = Open3.capture3(

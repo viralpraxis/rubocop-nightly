@@ -13,23 +13,6 @@ module RuboCop
 
           Outcome = Data.define(:index, :configuration_path, :stdout, :stderr, :variant)
 
-          class << self
-            # Without `plugins` the run is confined to RuboCop's own cops: `--show-cops` is asked
-            # for the core set alone, and the department filter then catches anything a plugin
-            # might still have registered.
-            def build_configuration(plugins: true)
-              Dir.chdir(Runtime.gems_data_directory) do
-                Configuration.build(
-                  parser_engine: 'parser_prism', remove_plugins: !plugins, keep_core_departments: !plugins
-                )
-              end
-            rescue Errno::ENOENT
-              raise ConfigurationError,
-                    "RuboCop gems directory #{Runtime.gems_data_directory} does not exist — " \
-                    'run `bundle exec rake gems:install` first'
-            end
-          end
-
           # `findings` is supplied by the caller so that a defect seen in an earlier batch is not
           # reported again in every subsequent one.
           def initialize( # rubocop:disable Metrics/ParameterLists
@@ -41,7 +24,7 @@ module RuboCop
 
             @target_paths = [*target_paths]
             @plugins = plugins
-            @configuration = configuration || self.class.build_configuration(plugins:)
+            @configuration = configuration || Configurations.build(plugins:)
             @timeout = timeout
             @findings = findings
             @reduce = reduce

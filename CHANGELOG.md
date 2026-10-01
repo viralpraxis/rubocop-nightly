@@ -1,5 +1,28 @@
 ## [Unreleased]
 
+- Add `--target-ruby-versions`, which makes one full pass over the corpus per
+  `AllCops: TargetRubyVersion` — `--target-ruby-versions 2.7,3.0`, or `all` for every version
+  the RuboCop under test accepts. Without it the fuzzer makes the single pass it always has.
+
+  The target version is the one configuration axis the generated variants cannot reach:
+  `--show-cops` does not report it as a cop attribute, so no variant ever varies it, yet 67
+  of RuboCop's own cops branch on it. `Style/ArgumentsForwarding` alone takes a different
+  path at 2.7, 3.0, 3.2 and 3.4, and a run pinned to one version only ever executes one of
+  them.
+
+  A named-version run leaves `AllCops: ParserEngine` at `default` instead of pinning
+  `parser_prism`. Prism refuses any target below 3.3, so a pinned engine would abort every
+  batch of a `2.7` pass on the configuration rather than running it; at `default` RuboCop
+  takes Prism where Prism can parse the target and the Parser gem below it.
+
+  Passes are run in the order given, and a pass builds its configuration only when it starts
+  rather than all of them up front, so one set of variants — a full copy of the cop
+  configuration per variant — is alive at a time instead of fifteen. Findings are
+  deduplicated across the whole run, so a defect that reproduces under several versions is
+  reported once, against the first version that reached it, and that version is what the
+  example's `mre.yml` pins. A version the driven RuboCop does not know fails the run before
+  the corpus is fetched.
+
 - Add five more repositories to the `git` corpus, each measured to fit a nightly budget
   with room to spare. One pass over each, four workers, times 39 configuration variants:
   `Homebrew/brew` 1.4h, `metasploit/metasploit-framework` 0.9h, `fastlane/fastlane` 0.6h,

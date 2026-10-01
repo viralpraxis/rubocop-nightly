@@ -27,6 +27,8 @@ module RuboCop
         @cop_names ||= raw_configuration.keys.grep(COP_NAME_PATTERN)
       end
 
+      def target_ruby_version = raw_configuration.dig('AllCops', 'TargetRubyVersion')
+
       # Maps, per cop, each `Supported*` list to the `Enforced*` key it configures. The
       # pairing is derived by normalising both names — RuboCop's naming is not mechanically
       # derivable, `SupportedStylesAlignWith` pairs with `EnforcedStyleAlignWith` — and falls

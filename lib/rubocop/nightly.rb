@@ -43,6 +43,7 @@ require_relative 'nightly/commands/compare/revision_specification'
 require_relative 'nightly/commands/compare/report'
 require_relative 'nightly/commands/compare/runner'
 
+require_relative 'nightly/commands/fuzzer/configurations'
 require_relative 'nightly/commands/fuzzer/error_details'
 require_relative 'nightly/commands/fuzzer/mre'
 require_relative 'nightly/commands/fuzzer/diagnostics'

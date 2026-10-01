@@ -10,18 +10,20 @@ module RuboCop
       class Builder
         def self.call(...) = new(...).call
 
-        def initialize(
+        def initialize( # rubocop:disable Metrics/ParameterLists
           raw_configuration = nil,
           enable_all_cops: false,
           remove_plugins: false,
           keep_core_departments: false,
-          parser_engine: nil
+          parser_engine: nil,
+          target_ruby_version: nil
         )
           @raw_configuration = raw_configuration
           @enable_all_cops = enable_all_cops
           @remove_plugins = remove_plugins
           @keep_core_departments = keep_core_departments
           @parser_engine = parser_engine
+          @target_ruby_version = target_ruby_version
         end
 
         def call
@@ -80,7 +82,7 @@ module RuboCop
           existing = {} unless existing.is_a?(Hash)
 
           existing.merge(
-            'TargetRubyVersion' => RuboCop::Nightly::Runtime.target_ruby_version,
+            'TargetRubyVersion' => @target_ruby_version || RuboCop::Nightly::Runtime.target_ruby_version,
             'NewCops' => 'enable',
             'SuggestExtensions' => false
           ).tap { it['ParserEngine'] = @parser_engine if @parser_engine }

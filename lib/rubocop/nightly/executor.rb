@@ -8,7 +8,8 @@ module RuboCop
       # (~0.5s against ~0.05s per file) stays around 1% while the blast radius drops ~17x.
       DEFAULT_OPTIONS = {
         batch_size: 1000, batch_timeout: nil, log_level: 'INFO',
-        reduce: false, autocorrect: false, plugins: true, only_show_types: nil
+        reduce: false, autocorrect: false, plugins: true, only_show_types: nil,
+        target_ruby_versions: nil
       }.freeze
       LOG_LEVELS = %w[DEBUG INFO WARN ERROR FATAL UNKNOWN].freeze
 
@@ -36,8 +37,9 @@ module RuboCop
       def call
         RuboCop::Nightly.logger.level = log_level
 
+        passes = target_ruby_versions
         base_paths = Corpus.new(source.fetch).files
-        process_batches(base_paths) unless nothing_to_do?(base_paths)
+        passes.each { process_batches(base_paths, configuration_for(it)) } unless nothing_to_do?(base_paths)
 
         Result.new(
           findings: @findings, failed_batches: @failed_batches, timed_out_batches: @timed_out_batches
@@ -48,14 +50,19 @@ module RuboCop
 
       attr_reader :source, :options
 
-      def process_batches(base_paths)
+      def process_batches(base_paths, configuration)
         total_batches_count = (base_paths.size.to_f / batch_size).ceil
+        suffix = pass_suffix(configuration)
 
         base_paths.each_slice(batch_size).with_index do |batch, index|
-          RuboCop::Nightly.logger.info "Processing group #{index.succ}/#{total_batches_count}"
+          RuboCop::Nightly.logger.info "Processing group #{index.succ}/#{total_batches_count}#{suffix}"
 
-          process(batch, index)
+          process(batch, index, configuration)
         end
+      end
+
+      def pass_suffix(configuration)
+        options.fetch(:target_ruby_versions) ? " targeting Ruby #{configuration.target_ruby_version}" : ''
       end
 
       def nothing_to_do?(base_paths)
@@ -67,16 +74,18 @@ module RuboCop
 
       # One bad batch must not take down a whole nightly run, but it must still be visible in
       # the exit status - whether it crashed or ran out of the time the batch timeout allows.
-      def process(batch, index)
-        RuboCop::Nightly::Commands::Fuzzer::Runner.new(batch, **runner_options).run
+      def process(batch, index, configuration)
+        RuboCop::Nightly::Commands::Fuzzer::Runner.new(batch, **runner_options(configuration)).run
       rescue ExecutionTimeout
         @timed_out_batches += 1
-        RuboCop::Nightly.logger.warn "Processing group #{index.succ} took more than #{batch_timeout}s, aborting"
+        RuboCop::Nightly.logger.warn(
+          "Processing group #{index.succ}#{pass_suffix(configuration)} took more than #{batch_timeout}s, aborting"
+        )
       rescue StandardError => e
-        record_failure(index, e)
+        record_failure(index, configuration, e)
       end
 
-      def runner_options
+      def runner_options(configuration)
         {
           configuration:, timeout: batch_timeout, findings: @findings,
           reduce: options.fetch(:reduce), autocorrect: options.fetch(:autocorrect),
@@ -84,17 +93,26 @@ module RuboCop
         }
       end
 
-      def record_failure(index, error)
+      def record_failure(index, configuration, error)
         @failed_batches += 1
-        RuboCop::Nightly.logger.error "Processing group #{index.succ} failed: #{error.class}: #{error.message}"
+        RuboCop::Nightly.logger.error(
+          "Processing group #{index.succ}#{pass_suffix(configuration)} failed: #{error.class}: #{error.message}"
+        )
         RuboCop::Nightly.logger.debug error.backtrace&.join("\n")
       end
 
-      # Built once and shared by every batch: it costs a `rubocop --show-cops` subprocess,
-      # a dependency-mining pass over every cop source, and the variant generation.
-      def configuration
-        @configuration ||=
-          RuboCop::Nightly::Commands::Fuzzer::Runner.build_configuration(plugins: options.fetch(:plugins))
+      # Built once per pass and shared by every batch of it: each one costs a
+      # `rubocop --show-cops` subprocess, a dependency-mining pass over every cop source, and
+      # the variant generation. Built when its pass starts rather than all of them up front,
+      # so one set of variants is alive at a time however many versions were asked for.
+      def configuration_for(target_ruby_version)
+        RuboCop::Nightly::Commands::Fuzzer::Configurations.build(
+          plugins: options.fetch(:plugins), target_ruby_version:
+        )
+      end
+
+      def target_ruby_versions
+        RuboCop::Nightly::Commands::Fuzzer::Configurations.target_ruby_versions(options.fetch(:target_ruby_versions))
       end
 
       def batch_size

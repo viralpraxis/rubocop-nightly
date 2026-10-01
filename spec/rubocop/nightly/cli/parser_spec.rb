@@ -216,6 +216,51 @@ RSpec.describe RuboCop::Nightly::CLI::Parser do
       end
     end
 
+    describe 'fuzzer --target-ruby-versions' do
+      it 'is absent unless the switch is given' do
+        expect(parse('fuzzer', '--source', 'rubygems').target_ruby_versions).to be_nil
+      end
+
+      it 'accepts a comma separated list' do
+        expect(parse('fuzzer', '--source', 'rubygems', '--target-ruby-versions', '2.7,3.0').target_ruby_versions)
+          .to eq([2.7, 3.0])
+      end
+
+      it 'tolerates spaces around the commas' do
+        expect(parse('fuzzer', '--source', 'rubygems', '--target-ruby-versions', '2.7, 3.0').target_ruby_versions)
+          .to eq([2.7, 3.0])
+      end
+
+      it 'does not fuzz the same version twice' do
+        expect(parse('fuzzer', '--source', 'rubygems', '--target-ruby-versions', '3.0,3.0').target_ruby_versions)
+          .to eq([3.0])
+      end
+
+      it 'accepts the short form' do
+        expect(parse('fuzzer', '--source', 'rubygems', '-r', '3.4').target_ruby_versions).to eq([3.4])
+      end
+
+      it 'keeps `all` for the executor to resolve against the driven RuboCop' do
+        expect(parse('fuzzer', '--source', 'rubygems', '--target-ruby-versions', 'all').target_ruby_versions)
+          .to eq(:all)
+      end
+
+      it 'passes the versions through to the executor' do
+        expect(parse('fuzzer', '--source', 'rubygems', '--target-ruby-versions', '3.4').executor_options)
+          .to include(target_ruby_versions: [3.4])
+      end
+
+      it 'rejects a version that is not MAJOR.MINOR' do
+        expect { parse('fuzzer', '--source', 'rubygems', '--target-ruby-versions', '3') }
+          .to raise_error(RuboCop::Nightly::CLI::UsageError, /unparsable target ruby version/)
+      end
+
+      it 'rejects an empty list' do
+        expect { parse('fuzzer', '--source', 'rubygems', '--target-ruby-versions', ',') }
+          .to raise_error(RuboCop::Nightly::CLI::UsageError, /needs at least one/)
+      end
+    end
+
     describe 'reduction' do
       it 'is off by default' do
         expect(parse('fuzzer', '--source', 'rubygems').reduce).to be(false)

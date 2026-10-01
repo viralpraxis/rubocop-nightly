@@ -50,6 +50,16 @@ RSpec.describe RuboCop::Nightly::Configuration do
         expect(RuboCop::Nightly::Runtime.target_ruby_version(bundle_gemfile: Pathname('/probe-b'))).to eq(current)
       end
 
+      it 'pins the version it was asked for instead' do
+        pinned = YAML.safe_load(build(raw, target_ruby_version: 2.7).to_yaml).dig('AllCops', 'TargetRubyVersion')
+
+        expect(pinned).to eq(2.7)
+      end
+
+      it 'reads the pinned version back' do
+        expect(build(raw, target_ruby_version: 2.7).target_ruby_version).to eq(2.7)
+      end
+
       it 'enables new cops' do
         expect(all_cops['NewCops']).to eq('enable')
       end

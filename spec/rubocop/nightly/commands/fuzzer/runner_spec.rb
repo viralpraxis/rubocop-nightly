@@ -445,31 +445,4 @@ RSpec.describe RuboCop::Nightly::Commands::Fuzzer::Runner do
         .to have_received(:execute).with(any_args, hash_including(require_plugins: false))
     end
   end
-
-  describe '.build_configuration with plugins disabled' do
-    before { allow(RuboCop::Nightly::Configuration).to receive(:build) }
-
-    it 'asks for a configuration with the plugins stripped out' do
-      described_class.build_configuration(plugins: false)
-
-      expect(RuboCop::Nightly::Configuration).to have_received(:build)
-        .with(hash_including(remove_plugins: true, keep_core_departments: true))
-    end
-
-    it 'keeps them by default' do
-      described_class.build_configuration
-
-      expect(RuboCop::Nightly::Configuration).to have_received(:build)
-        .with(hash_including(remove_plugins: false, keep_core_departments: false))
-    end
-  end
-
-  describe '.build_configuration' do
-    it 'raises an actionable error when the gems directory is missing' do
-      FileUtils.remove_entry(RuboCop::Nightly::Runtime.gems_data_directory)
-
-      expect { described_class.build_configuration }
-        .to raise_error(RuboCop::Nightly::ConfigurationError, /rake gems:install/)
-    end
-  end
 end
