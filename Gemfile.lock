@@ -92,7 +92,7 @@ GEM
     ruby-progressbar (1.13.0)
     rubydex (0.4.1)
     rubydex (0.4.1-x86_64-linux)
-    simplecov (1.3.1)
+    simplecov (1.3.2)
     tsort (0.2.0)
     unicode-display_width (3.3.0)
       unicode-emoji (~> 4.3)
